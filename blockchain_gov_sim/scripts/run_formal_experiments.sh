@@ -76,3 +76,5 @@ case "${1:-all}" in
     exit 1
     ;;
 esac
+
+bash scripts/wait_and_shutdown_if_idle.sh 120

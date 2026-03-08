@@ -201,7 +201,8 @@ python scripts/train_gov.py \
   --override configs/scenario_default_hard.yaml \
   --seed 42 \
   --run-name hard_seed42 \
-  --output-root outputs/formal 2>&1 | tee outputs/formal/logs/train_hard_seed42.log
+  --output-root outputs/formal 2>&1 | tee outputs/formal/logs/train_hard_seed42.log ; \
+bash scripts/wait_and_shutdown_if_idle.sh 120
 ```
 
 ### 5.2 moderate 正式训练
@@ -213,7 +214,8 @@ python scripts/train_gov.py \
   --override configs/scenario_default_moderate.yaml \
   --seed 42 \
   --run-name moderate_seed42 \
-  --output-root outputs/formal 2>&1 | tee outputs/formal/logs/train_moderate_seed42.log
+  --output-root outputs/formal 2>&1 | tee outputs/formal/logs/train_moderate_seed42.log ; \
+bash scripts/wait_and_shutdown_if_idle.sh 120
 ```
 
 ### 5.3 选最佳模型
@@ -230,7 +232,8 @@ python scripts/run_formal_suite.py \
   --config configs/default.yaml \
   --benchmark-config configs/benchmark_final.yaml \
   --override configs/scenario_default_hard.yaml \
-  --model-path outputs/formal/train/hard_best/model.zip 2>&1 | tee outputs/formal/logs/formal_suite.log
+  --model-path outputs/formal/train/hard_best/model.zip 2>&1 | tee outputs/formal/logs/formal_suite.log ; \
+bash scripts/wait_and_shutdown_if_idle.sh 120
 ```
 
 ### 5.5 一键脚本
@@ -238,6 +241,11 @@ python scripts/run_formal_suite.py \
 ```bash
 bash scripts/run_formal_experiments.sh all
 ```
+
+说明：
+- `scripts/run_formal_experiments.sh` 末尾已自动调用 `scripts/wait_and_shutdown_if_idle.sh 120`
+- 单条命令手工执行时，也建议像上面示例一样在末尾追加该脚本
+- 该脚本只会在“当前仓库下没有其他实验脚本仍在运行”时，等待两分钟后关机
 
 ## 6. manifest 与日志
 
