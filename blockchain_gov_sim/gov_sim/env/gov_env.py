@@ -344,6 +344,7 @@ class BlockchainGovEnv(gym.Env[dict[str, np.ndarray], int]):
             "timeout_failure": int(chain_result.timeout_failure),
             "leader_unstable": int(chain_result.leader_unstable),
             "tps": float(chain_result.tps),
+            "mask_ratio": float(np.mean(self.current_mask)),
             "queue_next": float(chain_result.queue_next),
             "invalid_action": int(invalid_action),
             "committee_members": committee.astype(int).tolist(),

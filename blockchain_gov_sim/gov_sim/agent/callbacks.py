@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 from typing import Any
 
 import pandas as pd
@@ -24,12 +25,20 @@ class TrainLoggingCallback(BaseCallback):
         super().__init__(verbose=verbose)
         self.log_path = Path(log_path)
         self.rows: list[dict[str, Any]] = []
+        self._start_time = 0.0
+        self._total_timesteps = 0
         self._ep_reward = 0.0
         self._ep_cost = 0.0
         self._ep_len = 0
         self._ep_unsafe = 0.0
         self._ep_tps = 0.0
         self._ep_latency = 0.0
+        self._ep_mask_ratio = 0.0
+
+    def _on_training_start(self) -> None:
+        """记录训练开始时间与目标步数，用于控制台实时进度输出。"""
+        self._start_time = time.monotonic()
+        self._total_timesteps = int(getattr(self.model, "_total_timesteps", 0))
 
     def _on_step(self) -> bool:
         """在每个环境步结束后更新当前 episode 的聚合统计。"""
@@ -44,29 +53,59 @@ class TrainLoggingCallback(BaseCallback):
             self._ep_unsafe += float(infos[0].get("unsafe", 0.0))
             self._ep_tps += float(infos[0].get("tps", 0.0))
             self._ep_latency += float(infos[0].get("L_bar_e", 0.0))
+            self._ep_mask_ratio += float(infos[0].get("mask_ratio", 0.0))
         if dones is not None and bool(dones[0]):
             info = infos[0] if infos else {}
             ep_len = max(self._ep_len, 1)
-            self.rows.append(
-                {
-                    "timesteps": int(self.num_timesteps),
-                    "episode_reward": self._ep_reward,
-                    "episode_cost": self._ep_cost,
-                    "episode_len": self._ep_len,
-                    "unsafe_rate": self._ep_unsafe / ep_len,
-                    "tps": self._ep_tps / ep_len,
-                    "latency": self._ep_latency / ep_len,
-                    "lagrangian_lambda": float(getattr(self.model, "lambda_value", 0.0)),
-                    "constraint_violation": float(max(0.0, self._ep_cost / ep_len - float(getattr(self.model, "cost_limit", 0.0)))),
-                }
-            )
+            row = {
+                "timesteps": int(self.num_timesteps),
+                "episode_reward": self._ep_reward,
+                "episode_cost": self._ep_cost,
+                "episode_len": self._ep_len,
+                "unsafe_rate": self._ep_unsafe / ep_len,
+                "tps": self._ep_tps / ep_len,
+                "latency": self._ep_latency / ep_len,
+                "mask_ratio": self._ep_mask_ratio / ep_len,
+                "lagrangian_lambda": float(getattr(self.model, "lambda_value", 0.0)),
+                "constraint_violation": float(max(0.0, self._ep_cost / ep_len - float(getattr(self.model, "cost_limit", 0.0)))),
+            }
+            self.rows.append(row)
+            self._print_progress(row)
             self._ep_reward = 0.0
             self._ep_cost = 0.0
             self._ep_len = 0
             self._ep_unsafe = 0.0
             self._ep_tps = 0.0
             self._ep_latency = 0.0
+            self._ep_mask_ratio = 0.0
         return True
+
+    def _print_progress(self, row: dict[str, Any]) -> None:
+        """把训练关键指标实时打印到 stdout，便于 `tee` 保存控制台日志。
+
+        这里输出最近 10 个 episode 的滚动均值，而不是单个 episode 的瞬时值，
+        这样更适合论文实验期间观察训练是否稳定、lambda 是否失控以及 mask 是否过于激进。
+        """
+
+        window = self.rows[-10:]
+        elapsed = time.monotonic() - self._start_time
+        reward_mean = sum(float(item["episode_reward"]) for item in window) / len(window)
+        cost_mean = sum(float(item["episode_cost"]) for item in window) / len(window)
+        unsafe_mean = sum(float(item["unsafe_rate"]) for item in window) / len(window)
+        mask_mean = sum(float(item["mask_ratio"]) for item in window) / len(window)
+        progress = self._total_timesteps if self._total_timesteps > 0 else "?"
+        print(
+            (
+                f"[train] step={row['timesteps']}/{progress} "
+                f"reward_mean={reward_mean:.3f} "
+                f"cost_mean={cost_mean:.3f} "
+                f"unsafe_rate={unsafe_mean:.3f} "
+                f"lambda={float(row['lagrangian_lambda']):.4f} "
+                f"mask_ratio={mask_mean:.3f} "
+                f"elapsed={elapsed:.1f}s"
+            ),
+            flush=True,
+        )
 
     def _on_training_end(self) -> None:
         if not self.rows:

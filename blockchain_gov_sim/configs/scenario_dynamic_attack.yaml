@@ -1,0 +1,11 @@
+# 动态攻击鲁棒性实验定义。
+formal:
+  dynamic_attacks:
+    methods:
+      - SingleRep-TopK-Static
+      - MultiRep-TopK-Static
+      - DVRC-like
+      - Ours
+    on_off_periods: [4, 8, 12]
+    zigzag_freqs: [0.08, 0.18, 0.32]
+    collusion_group_sizes: [2, 4, 6, 8]

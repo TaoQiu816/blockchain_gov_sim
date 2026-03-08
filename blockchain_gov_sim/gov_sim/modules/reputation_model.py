@@ -52,6 +52,11 @@ class ReputationModel:
     def __init__(self, config: dict[str, Any], num_rsus: int) -> None:
         self.config = config
         self.num_rsus = num_rsus
+        # `fusion_dims` 用于正式消融：
+        # - 默认是四维联合 `svc/con/rec/stab`
+        # - 若设为 `["svc"]`，则退化成单维信誉融合，但仍保留其余维度的证据更新，
+        #   这样 single-dimension reputation 消融才是在同一证据生成条件下做公平比较。
+        self.fusion_dims = tuple(config.get("fusion_dims", REPUTATION_DIMS))
         self.prior_alpha = float(config["prior_alpha"])
         self.prior_beta = float(config["prior_beta"])
         self.rho_cfg = config["rho"]
@@ -156,16 +161,18 @@ class ReputationModel:
 
         normalized_context = self._normalize_context(context)
         raw_weights = []
-        for dim in REPUTATION_DIMS:
+        for dim in self.fusion_dims:
             # 上下文门控不是固定权重，而是随 `A_e/Q_e/L_bar_e/RTT_e/churn/|E_e|` 动态变化。
             ctx_term = float(np.exp(np.dot(self.context_eta[dim], normalized_context))) if self.use_context_gate else 1.0
             raw_weights.append(reliability_median[dim] * ctx_term)
         raw_weights_np = np.asarray(raw_weights, dtype=np.float32)
         raw_weights_np = raw_weights_np / np.clip(raw_weights_np.sum(), self.eps, None)
-        dim_weights = {dim: float(raw_weights_np[idx]) for idx, dim in enumerate(REPUTATION_DIMS)}
+        dim_weights = {dim: 0.0 for dim in REPUTATION_DIMS}
+        for idx, dim in enumerate(self.fusion_dims):
+            dim_weights[dim] = float(raw_weights_np[idx])
 
         base_scores = np.zeros(self.num_rsus, dtype=np.float32)
-        for dim in REPUTATION_DIMS:
+        for dim in self.fusion_dims:
             base_scores += dim_weights[dim] * mu[dim]
 
         # 跨维一致性惩罚：防止“共识/推荐看起来很好，但服务维度很差”的伪装。

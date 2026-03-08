@@ -1,0 +1,35 @@
+# 单独调用正式消融时使用；与 benchmark_final 的 ablation 小节保持一致。
+output_root: outputs/formal
+run_name: ablation_formal
+
+eval:
+  episodes: 10
+  deterministic: true
+
+formal:
+  ablation:
+    seeds: [42, 52, 62]
+    timesteps: 120000
+    variants:
+      - name: w_o_context_gate
+        override:
+          reputation:
+            use_context_gate: false
+      - name: w_o_consistency_anti_manipulation
+        override:
+          reputation:
+            use_penalties: false
+      - name: topk_instead_of_soft_sortition
+        override:
+          env:
+            committee_method: topk
+      - name: plain_ppo
+        plain_ppo: true
+      - name: w_o_action_mask
+        override:
+          env:
+            mask_illegal_actions: false
+      - name: single_dimension_reputation
+        override:
+          reputation:
+            fusion_dims: [svc]

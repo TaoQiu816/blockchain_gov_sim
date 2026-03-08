@@ -1,0 +1,7 @@
+# 第四章正式评估配置。
+output_root: outputs/formal
+run_name: formal_eval
+
+eval:
+  episodes: 12
+  deterministic: true

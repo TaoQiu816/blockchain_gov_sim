@@ -1,0 +1,19 @@
+# 在已有 `base_requirements.txt` 对应 conda 环境上，为本项目补齐/调整的最小增量依赖。
+#
+# 设计原则：
+# 1. 尽量保留现有 `python=3.10` 与 `torch=2.1.2+cu118`；
+# 2. 不强制重装整套 PyTorch；
+# 3. 只把 RL 训练所必需的 SB3 生态补上；
+# 4. 将 gymnasium 调整到与该版本 SB3 兼容的范围。
+#
+# 使用方式：
+#   conda activate <你的现有环境>
+#   pip install -r base_env_delta_requirements.txt
+#
+# 说明：
+# - `stable-baselines3==2.4.0` 兼容 `torch>=1.13` 和 `gymnasium>=0.29.1,<1.1.0`
+# - 因此这里把当前 base 环境中的 `gymnasium=1.2.3` 下调到 `1.0.0`
+
+gymnasium==1.0.0
+stable-baselines3==2.4.0
+sb3-contrib==2.4.0

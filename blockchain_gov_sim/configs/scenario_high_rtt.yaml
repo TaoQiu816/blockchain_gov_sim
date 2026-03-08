@@ -1,0 +1,9 @@
+# 高 RTT 鲁棒性实验定义。
+formal:
+  high_rtt:
+    methods:
+      - Static-Param
+      - Heuristic-AIMD
+      - AE-PBFT-like
+      - Ours
+    rtt_max_values: [60, 80, 100, 120]

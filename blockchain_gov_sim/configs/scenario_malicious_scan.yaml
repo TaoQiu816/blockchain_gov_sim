@@ -1,0 +1,11 @@
+# 恶意节点比例扫描实验的统一定义。
+formal:
+  malicious_scan:
+    ratios: [0.0, 0.1, 0.2, 0.3, 0.4]
+    methods:
+      - Static-Param
+      - Heuristic-AIMD
+      - AE-PBFT-like
+      - DVRC-like
+      - TwoLayer-LPBFT-like
+      - Ours

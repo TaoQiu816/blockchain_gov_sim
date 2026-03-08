@@ -20,10 +20,20 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
     parser.add_argument("--eval-config", default=None)
+    parser.add_argument("--override", action="append", default=[], help="额外覆盖配置，可重复传入多个 YAML。")
     parser.add_argument("--model-path", default=None)
     parser.add_argument("--baseline", default=None)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--run-name", default=None)
+    parser.add_argument("--output-root", default=None)
     args = parser.parse_args()
-    config = load_config(args.config, args.eval_config)
+    config = load_config(args.config, args.eval_config, *args.override)
+    if args.seed is not None:
+        config["seed"] = int(args.seed)
+    if args.run_name is not None:
+        config["run_name"] = str(args.run_name)
+    if args.output_root is not None:
+        config["output_root"] = str(args.output_root)
     seed_everything(int(config["seed"]))
     run_evaluation(config=config, model_path=args.model_path, baseline_name=args.baseline)
 

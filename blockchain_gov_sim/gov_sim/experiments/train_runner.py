@@ -47,4 +47,6 @@ def run_training(config: dict[str, Any]) -> dict[str, Any]:
         save_line_plot(x, {"reward": log_df["episode_reward"]}, output_dir / "reward_curve.png", "Reward Curve", "Episode", "Reward")
         save_line_plot(x, {"cost": log_df["episode_cost"]}, output_dir / "cost_curve.png", "Cost Curve", "Episode", "Cost")
         save_line_plot(x, {"unsafe": log_df["unsafe_rate"]}, output_dir / "unsafe_curve.png", "Unsafe Curve", "Episode", "Unsafe")
+        if "lagrangian_lambda" in log_df.columns:
+            save_line_plot(x, {"lambda": log_df["lagrangian_lambda"]}, output_dir / "lambda_curve.png", "Lagrangian Lambda", "Episode", "Lambda")
     return {"output_dir": str(output_dir), "summary": summary}

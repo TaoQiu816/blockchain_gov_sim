@@ -18,14 +18,22 @@ from typing import Any, Generator
 import gymnasium as gym
 import numpy as np
 import torch
-from sb3_contrib import MaskablePPO
-from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.type_aliases import MaybeCallback
-from stable_baselines3.common.utils import explained_variance, obs_as_tensor
-from stable_baselines3.common.vec_env import VecEnv
 from torch.distributions import Distribution
 from torch import nn
 from torch.nn import functional as F
+
+try:
+    from sb3_contrib import MaskablePPO
+    from stable_baselines3.common.callbacks import BaseCallback
+    from stable_baselines3.common.type_aliases import MaybeCallback
+    from stable_baselines3.common.utils import explained_variance, obs_as_tensor
+    from stable_baselines3.common.vec_env import VecEnv
+except ImportError as exc:  # pragma: no cover - 只有未安装 RL 依赖时触发
+    raise ImportError(
+        "导入 MaskablePPOLagrangian 失败：缺少 sb3-contrib / stable-baselines3。\n"
+        "如果你正在复用 base_requirements.txt 对应的 conda 环境，请执行：\n"
+        "  pip install -r base_env_delta_requirements.txt"
+    ) from exc
 
 from gov_sim.agent.policy_wrappers import CostValueNet
 from gov_sim.constants import ACTION_DIM

@@ -13,18 +13,40 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sb3_contrib import MaskablePPO
-from stable_baselines3 import PPO
-from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import DummyVecEnv
-
-from gov_sim.agent.masked_ppo_lagrangian import MaskablePPOLagrangian
-from gov_sim.agent.policy_wrappers import resolve_policy_kwargs
 from gov_sim.baselines import BASELINE_REGISTRY, BaselinePolicy
 from gov_sim.env.gov_env import BlockchainGovEnv
 from gov_sim.modules.metrics_tracker import MetricsTracker
 from gov_sim.utils.device import resolve_device
 from gov_sim.utils.io import deep_update, ensure_dir
+
+RL_IMPORT_ERROR: ImportError | None = None
+try:
+    from sb3_contrib import MaskablePPO
+    from stable_baselines3 import PPO
+    from stable_baselines3.common.monitor import Monitor
+    from stable_baselines3.common.vec_env import DummyVecEnv
+except ImportError as exc:  # pragma: no cover - 只有缺失 RL 依赖时才会触发
+    MaskablePPO = Any  # type: ignore[assignment]
+    PPO = Any  # type: ignore[assignment]
+    Monitor = None  # type: ignore[assignment]
+    DummyVecEnv = Any  # type: ignore[assignment]
+    RL_IMPORT_ERROR = exc
+
+
+def _require_rl_dependencies() -> None:
+    """在真正进入 RL 训练/评估路径前检查依赖。
+
+    这样 baseline 相关模块即便在未安装 SB3 的环境下也仍可被导入，
+    但一旦用户尝试训练/加载 RL 模型，就会收到明确的安装提示，而不是晦涩的 ImportError。
+    """
+
+    if RL_IMPORT_ERROR is not None:
+        raise ImportError(
+            "缺少 RL 依赖。若你正在复用 base_requirements.txt 对应的 conda 环境，请执行：\n"
+            "  pip install -r base_env_delta_requirements.txt\n"
+            "当前缺失的首个依赖错误为："
+            f"{RL_IMPORT_ERROR}"
+        ) from RL_IMPORT_ERROR
 
 
 def _maybe_tensorboard_log(path: str | None) -> str | None:
@@ -41,6 +63,7 @@ def make_env(config: dict[str, Any]) -> BlockchainGovEnv:
 
 def make_vec_env(config: dict[str, Any]) -> DummyVecEnv:
     """创建单环境 VecEnv，方便直接复用 SB3 接口。"""
+    _require_rl_dependencies()
     return DummyVecEnv([lambda: Monitor(make_env(config))])
 
 
@@ -50,6 +73,10 @@ def build_model(
     use_lagrangian: bool = True,
 ) -> MaskablePPOLagrangian | MaskablePPO | PPO:
     """根据配置创建 RL 控制器。"""
+    _require_rl_dependencies()
+    from gov_sim.agent.masked_ppo_lagrangian import MaskablePPOLagrangian
+    from gov_sim.agent.policy_wrappers import resolve_policy_kwargs
+
     agent_cfg = config["agent"]
     resolved_device = resolve_device(agent_cfg.get("device"))
     common_kwargs = dict(
@@ -86,6 +113,9 @@ def build_model(
 
 def build_plain_ppo(config: dict[str, Any], env: DummyVecEnv) -> PPO:
     """构建无约束普通 PPO，用于 ablation。"""
+    _require_rl_dependencies()
+    from gov_sim.agent.policy_wrappers import resolve_policy_kwargs
+
     agent_cfg = config["agent"]
     resolved_device = resolve_device(agent_cfg.get("device"))
     return PPO(

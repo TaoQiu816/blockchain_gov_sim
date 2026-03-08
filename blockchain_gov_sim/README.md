@@ -50,6 +50,26 @@ conda env create -f environment.server.yml
 conda activate blockchain_gov_sim
 ```
 
+如果你已经有一套现成 conda 环境，并且它的包清单与 `base_requirements.txt` 基本一致，
+不要重新建环境，直接在该环境里补项目所需增量依赖即可：
+
+```bash
+cd /Users/qiutao/研/毕设/毕设/blockchainSim/blockchain_gov_sim
+conda activate <你的现有环境>
+pip install -r base_env_delta_requirements.txt
+```
+
+或者直接执行：
+
+```bash
+bash scripts/install_on_base_env.sh
+```
+
+说明：
+- 当前 `base_requirements.txt` 已包含 `python=3.10`、`torch=2.1.2+cu118`、`pandas`、`matplotlib`、`scikit-learn` 等基础依赖；
+- 但未包含本项目必需的 `stable-baselines3` 与 `sb3-contrib`；
+- 同时其中的 `gymnasium=1.2.3` 与 `stable-baselines3 2.4.x` 不兼容，因此 `base_env_delta_requirements.txt` 会把它调整到 `1.0.0`。
+
 如果你只想用 pip 锁定依赖：
 
 ```bash
@@ -72,6 +92,8 @@ pip install -r requirements.lock.txt
   作用：预定义场景片段，便于后续扩展脚本做场景批量运行。
 - `PARAMETER_CALIBRATION.md`
   作用：记录第四章参数分类、pilot 结果、默认工作点和正式训练建议。
+- `FORMAL_EXPERIMENTS.md`
+  作用：固定第四章正式实验矩阵、单 GPU 调度顺序、运行命令与输出规范。
 
 ## 训练
 
