@@ -1,0 +1,16 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Test/cache artifacts
+.pytest_cache/
+
+# Local environments
+.venv/
+venv/
+
+# Experiment outputs
+outputs/
+
+# OS/editor noise
+.DS_Store

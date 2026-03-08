@@ -1,0 +1,14 @@
+# 训练配置覆盖：优先调整训练步数与训练期评估频率。
+run_name: train_formal
+agent:
+  learning_rate: 2.5e-4
+  total_timesteps: 100000
+  n_steps: 512
+  batch_size: 128
+  n_epochs: 8
+eval:
+  episodes: 6
+
+study:
+  # 正式实验建议至少 3 个随机种子；如算力允许可扩展到 5 个。
+  formal_seed_list: [42, 52, 62]

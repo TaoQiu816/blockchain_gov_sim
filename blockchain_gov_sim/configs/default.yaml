@@ -1,0 +1,244 @@
+# 全局随机种子。用于环境、证据生成、委员会抽签与 PyTorch。
+seed: 42
+# 所有训练/评估/benchmark/ablation 的输出根目录。
+output_root: outputs
+# 当前运行名，会拼到 outputs/<stage>/<run_name>。
+run_name: default_run
+
+env:
+  # 单个 episode 的治理周期数。
+  episode_length: 120
+  # RSU 全节点数量。
+  num_rsus: 27
+  # 恶意 RSU 比例。
+  malicious_ratio: 0.32
+  # 资格集的最小稳定性门槛。
+  u_min: 0.58
+  # 安全判定所需最小诚实比例。
+  h_min: 0.68
+  # 平滑约束：限制相邻周期动作变化幅度。
+  delta_m_max: 4
+  delta_b_max: 256
+  delta_tau_max: 40
+  delta_theta_max: 0.2
+  # 在 no_action_mask 消融中，非法动作只靠 reward penalty 处理。
+  invalid_action_penalty: 6.0
+  # 是否启用基于当前资格集与信誉质量的安全先验屏蔽。
+  unsafe_action_guard: true
+  # 主方案为 true；no_action_mask 消融会关掉它。
+  mask_illegal_actions: true
+  # 主方案默认使用软抽签；Top-K 由部分 baseline / ablation 显式覆盖。
+  committee_method: soft_sortition
+  soft_sortition_beta: 6.0
+  # 信誉分布直方图摘要的分箱数。
+  observation_hist_bins: 5
+  reward_weights:
+    throughput: 1.6
+    latency: 0.08
+    queue: 0.025
+    smooth: 0.12
+  cost_weights:
+    honest_penalty: 0.4
+  reward_normalization: true
+  cost_normalization: true
+
+reputation:
+  # Beta 先验。
+  prior_alpha: 1.0
+  prior_beta: 1.0
+  # 各维折扣系数 rho_d。
+  rho:
+    svc: 0.95
+    con: 0.96
+    rec: 0.94
+    stab: 0.97
+  # 冷启动门控超参数 N0。
+  n0: 8.0
+  eps: 1.0e-6
+  # 上下文感知门控向量 eta_d，对应 c=[A,Q,L_bar,RTT,chi,|E|]。
+  context_eta:
+    svc: [0.12, -0.08, -0.10, -0.06, -0.04, 0.04]
+    con: [-0.03, 0.08, -0.05, -0.08, -0.03, 0.10]
+    rec: [0.02, 0.03, -0.04, -0.02, 0.01, 0.06]
+    stab: [-0.04, -0.03, -0.03, -0.05, -0.12, -0.02]
+  penalty:
+    # 跨维一致性阈值。
+    delta_cs: 0.1
+    delta_rs: 0.1
+    # on-off / zigzag 惩罚参数。
+    onoff_eta: 0.85
+    v0: 0.07
+    mu0: 0.45
+    # 推荐相似度阈值与稳定性阈值。
+    rho0: 0.85
+    u0: 0.75
+    # 各惩罚项系数。
+    gamma_sc: 0.35
+    gamma_on: 0.30
+    gamma_rec: 0.25
+    gamma_col: 0.22
+    gamma_stab: 0.18
+  # 消融：去掉上下文门控。
+  use_context_gate: true
+  # 消融：去掉反操纵与一致性惩罚。
+  use_penalties: true
+
+chain:
+  # 链侧时延模型参数。
+  cq: 0.08
+  c0: 4.0
+  c1: 0.30
+  c2: 0.015
+  c3: 10.0
+  c4: 4.0
+  l_ctrl: 2.0
+  b_ctrl: 50.0
+  l_pen: 120.0
+  tau_view_factor: 1.3
+  min_view_timeout: 30.0
+  # EWMA 到达率估计与 leader 不稳定阈值。
+  lambda_ewma: 0.9
+  leader_instability_threshold: 0.7
+
+scenario:
+  # 默认场景名，可切换为 stable / step / mmpp。
+  default_name: stable
+  stable:
+    type: stable
+    lambda: 260
+  step:
+    type: step
+    lambda: 230
+    e0: 50
+    k: 1.8
+  mmpp:
+    type: mmpp
+    lambdas: [120, 220]
+    transition:
+      - [0.92, 0.08]
+      - [0.15, 0.85]
+    initial_state: 0
+  network:
+    # RTT 与 online/offline 马尔可夫链参数。
+    rtt_min: 14.0
+    rtt_max: 42.0
+    p_off: 0.08
+    p_on: 0.22
+  honest_base:
+    # 诚实节点四维基础成功概率 p0_d。
+    svc: 0.95
+    con: 0.97
+    rec: 0.92
+    stab: 0.96
+  degradation:
+    # p^H_d = clip(p0_d - a_d*load - b_d*RTT_norm - c_d*chi, 0, 1)
+    svc: [0.24, 0.08, 0.12]
+    con: [0.16, 0.05, 0.20]
+    rec: [0.10, 0.04, 0.08]
+    stab: [0.07, 0.03, 0.35]
+  # 每个周期、每个节点、每个维度的证据条数。
+  evidence_per_node: 4
+  attack:
+    # 攻击模式开关与强度参数。
+    on_off: true
+    zigzag: true
+    bad_mouthing: true
+    ballot_stuffing: true
+    collusion: true
+    cross_dim_camouflage: true
+    on_off_period: 8
+    zigzag_freq: 0.18
+    collusion_group_size: 3
+
+agent:
+  # SB3 policy 类型；配合 Dict obs 使用 MultiInputPolicy。
+  policy: MultiInputPolicy
+  device: auto
+  learning_rate: 3.0e-4
+  n_steps: 256
+  batch_size: 64
+  n_epochs: 6
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.01
+  vf_coef: 0.5
+  # Lagrangian 相关超参数。
+  cost_vf_coef: 0.5
+  max_grad_norm: 0.5
+  total_timesteps: 4000
+  lagrangian_lr: 0.02
+  cost_limit: 0.18
+  lambda_init: 0.1
+  lambda_max: 10.0
+  # 是否对 reward/cost 做在线标准化。
+  normalize_advantage: true
+  tensorboard_log: outputs/tensorboard
+  policy_kwargs:
+    net_arch:
+      pi: [256, 256]
+      vf: [256, 256]
+    activation_fn: ReLU
+    ortho_init: true
+
+eval:
+  # 默认评估 episode 数。
+  episodes: 8
+  deterministic: true
+  # 用于把 trust score 转为恶意节点二分类结果。
+  malicious_threshold: 0.45
+
+baselines:
+  # 基础静态动作。
+  static_action: [11, 256, 40, 0.55]
+  # Top-K 类 baseline 的信誉分位阈值。
+  topk_quantile: 0.65
+  aimd:
+    # AIMD 启发式阈值与增减参数。
+    queue_high: 260
+    queue_low: 80
+    ai_m: 2
+    ai_b: 128
+    md_m: 0.8
+    md_b: 0.5
+
+study:
+  # 固定结构参数：不作为默认工作点标定，而是模型定义本身。
+  fixed_structure:
+    action_space_size: 400
+    committee_size_candidates: [7, 9, 11, 13, 15]
+    block_size_candidates: [128, 256, 384, 512]
+    batch_timeout_candidates_ms: [20, 40, 60, 80]
+    theta_candidates: [0.40, 0.50, 0.60, 0.70, 0.80]
+    reputation_dims: [svc, con, rec, stab]
+  # 默认工作点：用于正式章节主结果。
+  default_workpoint:
+    num_rsus: 27
+    malicious_ratio: 0.32
+    stable_lambda: 260
+    rtt_range_ms: [14, 42]
+    p_off: 0.08
+    p_on: 0.22
+    rho: {svc: 0.95, con: 0.96, rec: 0.94, stab: 0.97}
+    n0: 8.0
+    penalties:
+      gamma_sc: 0.35
+      gamma_on: 0.30
+      gamma_rec: 0.25
+      gamma_col: 0.22
+      gamma_stab: 0.18
+    static_action: [11, 256, 40, 0.55]
+  # 用于 benchmark/ablation 的横轴扫描参数。
+  scan_axes:
+    malicious_ratio: [0.0, 0.1, 0.2, 0.3, 0.4]
+    on_off_period: [4, 8, 12]
+    zigzag_freq: [0.08, 0.18, 0.32]
+    collusion_group_size: [2, 3, 5]
+    step_multiplier_k: [1.5, 2.0, 2.5]
+    rtt_max_ms: [55.0, 70.0, 90.0]
+    p_off: [0.06, 0.10, 0.14]
+    p_on: [0.30, 0.25, 0.18]
+  # 当前实现不存在独立的“svc/con 内部子权重”超参数；
+  # 正式实验继续使用上下文感知动态维度权重 w_d(e)，而不是人为再引入固定二级权重。
+  note:
+    svc_con_internal_weight: "not_explicit_in_current_implementation"

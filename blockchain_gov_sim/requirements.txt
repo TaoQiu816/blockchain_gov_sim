@@ -1,0 +1,14 @@
+# 核心数值与配置
+numpy>=1.26,<3
+PyYAML>=6.0
+# 环境与强化学习
+gymnasium>=0.29,<1.1
+torch>=2.2,<3
+stable-baselines3>=2.3,<2.8
+sb3-contrib>=2.3,<2.8
+# 数据、绘图与评估
+pandas>=2.2,<3
+matplotlib>=3.8,<4
+scikit-learn>=1.5,<2
+# 测试
+pytest>=8.0,<9
