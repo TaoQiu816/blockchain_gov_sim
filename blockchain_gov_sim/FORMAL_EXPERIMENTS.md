@@ -262,39 +262,29 @@ bash scripts/run_formal_experiments.sh all
 
 ## 6.1 正式结果同步到仓库
 
-正式实验结果默认仍然写在：
+正式实验结果的统一保存与同步路径现已归正为：
 
 - `outputs/formal/`
 
-该目录继续保持“不直接提交到 Git”，避免临时输出污染仓库。
-如果需要把正式结果同步到仓库，请执行：
+也就是说，后续不再建议走 `results/formal_release/` 的二次归档流程，
+而是直接把 `outputs/formal/` 作为正式结果目录与 Git 同步目录。
+
+同步前请执行：
 
 ```bash
 bash scripts/sync_formal_results.sh
 ```
 
-执行后会生成：
+这个脚本会直接在 `outputs/formal/` 下完成：
 
-- `results/formal_release/`
-
-这个目录会纳入 Git，同步内容包括：
-
-- `train/`
-- `main_compare/`
-- `malicious_scan/`
-- `dynamic_attacks/`
-- `load_shock/`
-- `high_rtt/`
-- `high_churn/`
-- `ablation/`
-- `logs/`
-- `manifest.json`
-- `manifest.jsonl`
+- 噪声文件清理
+- 训练目录综合图补齐
+- 结果命名规范化
 
 推荐提交方式：
 
 ```bash
-git add results/formal_release
+git add outputs/formal
 git commit -m "Add formal experiment results"
 git push
 ```

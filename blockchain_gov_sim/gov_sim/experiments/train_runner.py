@@ -12,6 +12,7 @@ from gov_sim.experiments import build_model, evaluate_controller, make_vec_env, 
 from gov_sim.utils.device import device_runtime_info
 from gov_sim.utils.io import write_json
 from gov_sim.utils.plotting import save_line_plot
+from gov_sim.utils.train_artifacts import generate_train_artifacts
 
 
 def run_training(config: dict[str, Any]) -> dict[str, Any]:
@@ -49,4 +50,6 @@ def run_training(config: dict[str, Any]) -> dict[str, Any]:
         save_line_plot(x, {"unsafe": log_df["unsafe_rate"]}, output_dir / "unsafe_curve.png", "Unsafe Curve", "Episode", "Unsafe")
         if "lagrangian_lambda" in log_df.columns:
             save_line_plot(x, {"lambda": log_df["lagrangian_lambda"]}, output_dir / "lambda_curve.png", "Lagrangian Lambda", "Episode", "Lambda")
+    # 统一补充论文展示常用的综合图和命名兼容文件。
+    generate_train_artifacts(output_dir)
     return {"output_dir": str(output_dir), "summary": summary}

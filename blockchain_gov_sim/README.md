@@ -112,13 +112,24 @@ python scripts/train_gov.py --config configs/default.yaml --train-config configs
 
 训练输出目录：
 
-- `outputs/train/<run_name>/train_log.csv`
-- `outputs/train/<run_name>/train_summary.json`
-- `outputs/train/<run_name>/reward_curve.png/.pdf`
-- `outputs/train/<run_name>/cost_curve.png/.pdf`
-- `outputs/train/<run_name>/unsafe_curve.png/.pdf`
-- `outputs/train/<run_name>/post_train_eval.csv`
-- `outputs/train/<run_name>/model.zip`
+- 常规运行：`outputs/train/<run_name>/...`
+- 第四章正式实验：`outputs/formal/train/<run_name>/...`
+
+正式实验训练目录至少包含：
+
+- `train_log.csv`
+- `train_metrics.csv`
+- `train_summary.json`
+- `reward_curve.png/.pdf`
+- `cost_curve.png/.pdf`
+- `unsafe_curve.png/.pdf`
+- `lambda_curve.png/.pdf`
+- `convergence_panel.png/.pdf`
+- `training_diagnostics_panel.png/.pdf`
+- `post_train_eval.csv`
+- `post_train_eval_panel.png/.pdf`
+- `post_train_action_trajectory.png/.pdf`
+- `model.zip`
 
 ## 评估
 
@@ -240,19 +251,24 @@ pytest -q
 - `outputs/ablation/*`
   消融汇总表和对比柱状图。
 
-如果你需要把正式实验结果同步到 Git 仓库，不要直接提交整个 `outputs/`。
-当前仓库提供了一个受控归档目录：
+当前仓库对“正式实验结果”的推荐同步路径已经归一化为：
 
-- `results/formal_release/`
+- `outputs/formal/`
 
-同步命令：
+也就是说：
+- 后续正式训练统一保存到 `outputs/formal/train/<run_name>/`
+- 正式 benchmark / ablation 统一保存到 `outputs/formal/<experiment_group>/`
+- Git 同步时直接提交 `blockchain_gov_sim/outputs/formal/`
+
+同步前可执行：
 
 ```bash
 bash scripts/sync_formal_results.sh
 ```
 
-该脚本会把 `outputs/formal/` 下的正式训练、benchmark、ablation、日志和 manifest
-整理到 `results/formal_release/`，然后你就可以正常 `git add` / `git commit` / `git push`。
+该脚本会：
+- 清理 `.DS_Store`、`.ipynb_checkpoints`
+- 给 `outputs/formal/train/*` 自动补齐综合收敛图和评估图
 
 ## 常见问题
 
