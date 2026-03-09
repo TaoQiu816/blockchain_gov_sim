@@ -1,0 +1,80 @@
+{
+  "c1_mild": {
+    "Static-Param": {
+      "unsafe_rate": 0.0,
+      "queue_peak": 0.0,
+      "eligible_size_mean": 15.258333333333333,
+      "tps": 8260.01688740308,
+      "mean_latency": 23.860880849702717,
+      "oscillation_index": 0.0
+    },
+    "Heuristic-AIMD": {
+      "unsafe_rate": 0.0,
+      "queue_peak": 3223.0,
+      "eligible_size_mean": 16.666666666666668,
+      "tps": 6649.511977182886,
+      "mean_latency": 21.612733349082358,
+      "oscillation_index": 0.014705883339047432
+    },
+    "Ours-short": {
+      "unsafe_rate": 0.0,
+      "queue_peak": 0.0,
+      "eligible_size_mean": 16.466666666666665,
+      "tps": 8521.27801880467,
+      "mean_latency": 22.62171691657624,
+      "oscillation_index": 13.235294342041016
+    }
+  },
+  "c2_balanced": {
+    "Static-Param": {
+      "unsafe_rate": 0.0,
+      "queue_peak": 7325.0,
+      "eligible_size_mean": 12.716666666666667,
+      "tps": 6779.9702391705805,
+      "mean_latency": 31.17435635180002,
+      "oscillation_index": 0.959243655204773
+    },
+    "Heuristic-AIMD": {
+      "unsafe_rate": 0.0,
+      "queue_peak": 8734.0,
+      "eligible_size_mean": 13.1,
+      "tps": 5617.623891955427,
+      "mean_latency": 35.06331545118524,
+      "oscillation_index": 0.0
+    },
+    "Ours-short": {
+      "unsafe_rate": 0.0,
+      "queue_peak": 514.0,
+      "eligible_size_mean": 12.6,
+      "tps": 12853.770911479378,
+      "mean_latency": 26.49089725750206,
+      "oscillation_index": 3.545168161392212
+    }
+  },
+  "c3_stress": {
+    "Static-Param": {
+      "unsafe_rate": 0.0,
+      "queue_peak": 11987.0,
+      "eligible_size_mean": 12.1,
+      "tps": 4806.681695521417,
+      "mean_latency": 53.536153906170576,
+      "oscillation_index": 0.959243655204773
+    },
+    "Heuristic-AIMD": {
+      "unsafe_rate": 0.008333333333333333,
+      "queue_peak": 13011.0,
+      "eligible_size_mean": 12.583333333333334,
+      "tps": 3979.6631778237424,
+      "mean_latency": 55.7998467869177,
+      "oscillation_index": 0.0
+    },
+    "Ours-short": {
+      "unsafe_rate": 0.0,
+      "queue_peak": 1614.0,
+      "eligible_size_mean": 12.708333333333334,
+      "tps": 11895.954120150702,
+      "mean_latency": 32.51204319131681,
+      "oscillation_index": 40.91008758544922
+    }
+  }
+}

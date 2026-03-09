@@ -11,6 +11,10 @@ venv/
 
 # Experiment outputs
 outputs/
+!blockchain_gov_sim/outputs/
+!blockchain_gov_sim/outputs/**
+!blockchain_gov_sim/results/
+!blockchain_gov_sim/results/**
 
 # OS/editor noise
 .DS_Store
