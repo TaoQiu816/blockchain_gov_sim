@@ -22,6 +22,9 @@ def test_train_smoke(tmp_path: Path) -> None:
     result = run_training(config)
     assert Path(result["output_dir"]).exists()
     assert (Path(result["output_dir"]) / "model.zip").exists()
+    assert (Path(result["output_dir"]) / "train_audit.json").exists()
+    train_log = Path(result["output_dir"]) / "train_log.csv"
+    assert train_log.exists()
 
 
 def test_topk_baseline_switches_committee_method() -> None:

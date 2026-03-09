@@ -144,6 +144,29 @@ def generate_train_artifacts(run_dir: str | Path) -> None:
                 )
         _save_panel(fig, directory / "training_diagnostics_panel.png")
 
+        health_series = [
+            ("episode_repeat_ratio", "Episode Repeat Ratio"),
+            ("recent_unique_trajectory_count", "Recent Unique Trajectories"),
+            ("eligible_size_mean", "Eligible Size Mean"),
+            ("rolling_reward_mean", "Rolling Reward Mean"),
+        ]
+        if any(column in train_df.columns for column, _ in health_series):
+            fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+            axes = axes.flatten()
+            for axis, (column, title) in zip(axes, health_series):
+                if column in train_df.columns:
+                    _plot_with_smoothing(
+                        axis,
+                        x,
+                        train_df[column].astype(float).to_numpy(),
+                        title,
+                        "Episode",
+                        raw_color="#9aa48f",
+                        smooth_color="#4e6b44",
+                        rolling_window=rolling_window,
+                    )
+            _save_panel(fig, directory / "training_health_panel.png")
+
         # 单张平滑曲线：方便论文正文单图展示。
         single_series = [
             ("episode_reward", "Reward", "reward_curve_smoothed.png", "Reward"),

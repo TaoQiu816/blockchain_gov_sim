@@ -27,7 +27,6 @@ from gov_sim.modules.evidence_generator import EvidenceGenerator
 from gov_sim.modules.evidence_generator import EvidenceBatch
 from gov_sim.modules.reputation_model import ReputationModel, ReputationSnapshot
 from gov_sim.modules.scenario_model import ScenarioModel, ScenarioStep
-from gov_sim.utils.seed import seed_everything
 
 
 class BlockchainGovEnv(gym.Env[dict[str, np.ndarray], int]):
@@ -44,7 +43,10 @@ class BlockchainGovEnv(gym.Env[dict[str, np.ndarray], int]):
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__()
         self.config = config
-        self.seed_value = int(config["seed"])
+        self.base_seed = int(config["seed"])
+        self.seed_value = self.base_seed
+        self.episode_counter = 0
+        self.current_episode_seed = self.base_seed
         self.env_cfg = config["env"]
         self.eval_cfg = config.get("eval", {})
         self.num_rsus = int(self.env_cfg["num_rsus"])
@@ -84,6 +86,23 @@ class BlockchainGovEnv(gym.Env[dict[str, np.ndarray], int]):
         self.last_info: dict[str, Any] = {}
         self.current_evidence: EvidenceBatch | None = None
         self.committee_override_method: str | None = None
+
+    def _next_episode_seed(self, seed: int | None) -> int:
+        """派生本轮 episode 的局部随机种子。
+
+        设计目标：
+        - 显式 `reset(seed=x)` 时，轨迹对同一 seed 严格可复现；
+        - 训练中无显式 seed 的连续 reset 会得到不同 episode；
+        - 不在这里重置全局 torch / numpy / random 状态，避免训练分布退化。
+        """
+
+        if seed is not None:
+            self.base_seed = int(seed)
+            self.episode_counter = 1
+            return self.base_seed
+        episode_seed = self.base_seed + self.episode_counter
+        self.episode_counter += 1
+        return int(episode_seed)
 
     def _eligible_nodes(self, theta: float) -> np.ndarray:
         """按照当前信誉快照与动作门槛 `theta` 计算资格集。"""
@@ -241,28 +260,29 @@ class BlockchainGovEnv(gym.Env[dict[str, np.ndarray], int]):
     def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
         """重置环境并返回首个观测。
 
-        这里会把 seed 传递给所有内部随机模块，确保：
-        - 同一 seed 下整条轨迹可复现；
-        - 不同 seed 下 episode 真正独立，而不是反复复制同一条样本路径。
+        这里为每个 episode 派生独立局部 seed，并传递给内部随机模块，确保：
+        - 同一 base seed 下整次训练可复现；
+        - 同一训练 run 内，不同 episode 不会反复复制同一条样本路径。
         """
 
-        if seed is not None:
-            self.seed_value = int(seed)
+        episode_seed = self._next_episode_seed(seed)
+        self.seed_value = episode_seed
+        self.current_episode_seed = episode_seed
         if options and "config_override" in options:
             raise ValueError("config_override is not supported at env.reset(); create a new env instead.")
-        seed_everything(self.seed_value)
         self.epoch = 0
         self.queue_size = 0.0
         self.last_latency = 0.0
         self.prev_action = self.default_action
         self.committee_override_method = None
-        self.scenario.reset(seed=self.seed_value)
-        self.evidence_generator.reset(seed=self.seed_value)
+        self.action_space.seed(episode_seed)
+        self.scenario.reset(seed=episode_seed)
+        self.evidence_generator.reset(seed=episode_seed)
         self.reputation_model.reset()
-        self.committee_sampler.reset(seed=self.seed_value)
+        self.committee_sampler.reset(seed=episode_seed)
         self.chain_model.reset()
         self._prepare_epoch()
-        self.last_info = {"reset": True}
+        self.last_info = {"reset": True, "episode_seed": episode_seed}
         return self._copy_obs(), self.last_info.copy()
 
     def step(self, action: int) -> tuple[dict[str, np.ndarray], float, bool, bool, dict[str, Any]]:
@@ -317,6 +337,7 @@ class BlockchainGovEnv(gym.Env[dict[str, np.ndarray], int]):
         # `info` 作为审计总线，尽量把论文中关心的链侧指标和信誉侧指标都带出去。
         info = {
             "epoch": self.epoch,
+            "episode_seed": int(self.current_episode_seed),
             "A_e": int(self.current_scenario.arrivals),
             "Q_e": float(self.queue_size),
             "S_e": float(chain_result.service_capacity),

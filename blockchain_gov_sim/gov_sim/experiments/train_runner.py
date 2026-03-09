@@ -20,11 +20,12 @@ def run_training(config: dict[str, Any]) -> dict[str, Any]:
     output_dir = prepare_output_dir(config, "train")
     env = make_vec_env(config)
     model = build_model(config=config, env=env, use_lagrangian=True)
-    callback = TrainLoggingCallback(log_path=output_dir / "train_log.csv")
+    callback = TrainLoggingCallback(log_path=output_dir / "train_log.csv", audit_path=output_dir / "train_audit.json")
     model.learn(total_timesteps=int(config["agent"]["total_timesteps"]), callback=callback, progress_bar=False)
     model.save(str(output_dir / "model"))
 
     log_df = pd.read_csv(output_dir / "train_log.csv") if (output_dir / "train_log.csv").exists() else pd.DataFrame()
+    audit_summary = callback.audit_summary()
     eval_df, eval_summary = evaluate_controller(
         controller=model,
         config=config,
@@ -40,6 +41,7 @@ def run_training(config: dict[str, Any]) -> dict[str, Any]:
         "lambda_final": float(getattr(model, "lambda_value", 0.0)),
         "device": str(getattr(model, "device", "unknown")),
         "device_runtime": device_runtime_info(),
+        "training_audit": audit_summary,
         "post_train_eval": eval_summary,
     }
     write_json(output_dir / "train_summary.json", summary)

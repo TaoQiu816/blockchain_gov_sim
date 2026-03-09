@@ -1,0 +1,15 @@
+# seed 修复后的最小可信重训配置。
+# 只用于 moderate/hard_seed42 的短训验证，不替代正式 300k 配置。
+output_root: outputs/seedfix_verify
+run_name: train_seedfix_verify
+
+agent:
+  learning_rate: 2.5e-4
+  total_timesteps: 120000
+  n_steps: 512
+  batch_size: 128
+  n_epochs: 8
+
+eval:
+  episodes: 10
+  deterministic: true
