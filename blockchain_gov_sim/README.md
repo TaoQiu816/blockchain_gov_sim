@@ -240,6 +240,20 @@ pytest -q
 - `outputs/ablation/*`
   消融汇总表和对比柱状图。
 
+如果你需要把正式实验结果同步到 Git 仓库，不要直接提交整个 `outputs/`。
+当前仓库提供了一个受控归档目录：
+
+- `results/formal_release/`
+
+同步命令：
+
+```bash
+bash scripts/sync_formal_results.sh
+```
+
+该脚本会把 `outputs/formal/` 下的正式训练、benchmark、ablation、日志和 manifest
+整理到 `results/formal_release/`，然后你就可以正常 `git add` / `git commit` / `git push`。
+
 ## 常见问题
 
 - `ModuleNotFoundError: gov_sim`

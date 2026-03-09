@@ -260,6 +260,45 @@ bash scripts/run_formal_experiments.sh all
 - 命令
 - 日志路径
 
+## 6.1 正式结果同步到仓库
+
+正式实验结果默认仍然写在：
+
+- `outputs/formal/`
+
+该目录继续保持“不直接提交到 Git”，避免临时输出污染仓库。
+如果需要把正式结果同步到仓库，请执行：
+
+```bash
+bash scripts/sync_formal_results.sh
+```
+
+执行后会生成：
+
+- `results/formal_release/`
+
+这个目录会纳入 Git，同步内容包括：
+
+- `train/`
+- `main_compare/`
+- `malicious_scan/`
+- `dynamic_attacks/`
+- `load_shock/`
+- `high_rtt/`
+- `high_churn/`
+- `ablation/`
+- `logs/`
+- `manifest.json`
+- `manifest.jsonl`
+
+推荐提交方式：
+
+```bash
+git add results/formal_release
+git commit -m "Add formal experiment results"
+git push
+```
+
 ## 7. 当前是否可以正式开跑
 
 可以。
