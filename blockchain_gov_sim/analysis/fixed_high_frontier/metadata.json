@@ -1,0 +1,38 @@
+{
+  "mode": "minimal",
+  "n_episodes": 5,
+  "n_checkpoints": 5,
+  "n_scenes": 4,
+  "n_templates": 12,
+  "total_fixed_episodes": 1200,
+  "deterministic_eval": true,
+  "high_policy_mode": "fixed_template",
+  "seed_manifest_path": "eval_seed_manifest.json",
+  "checkpoint_metadata": [
+    {
+      "checkpoint_name": "low_model",
+      "low_model_path": "outputs/formal_multiseed/hierarchical/formal_final_seed42/stage3_high_refine/low_model.zip",
+      "low_model_hash": "f04a620ac0ae0d3a"
+    },
+    {
+      "checkpoint_name": "low_model",
+      "low_model_path": "outputs/formal_multiseed/hierarchical/formal_final_seed43/stage3_high_refine/low_model.zip",
+      "low_model_hash": "f04a620ac0ae0d3a"
+    },
+    {
+      "checkpoint_name": "low_model",
+      "low_model_path": "outputs/formal_multiseed/hierarchical/formal_final_seed44/stage3_high_refine/low_model.zip",
+      "low_model_hash": "f04a620ac0ae0d3a"
+    },
+    {
+      "checkpoint_name": "low_model",
+      "low_model_path": "outputs/formal_multiseed/hierarchical/formal_final_seed45/stage3_high_refine/low_model.zip",
+      "low_model_hash": "f04a620ac0ae0d3a"
+    },
+    {
+      "checkpoint_name": "low_model",
+      "low_model_path": "outputs/formal_multiseed/hierarchical/formal_final_seed46/stage3_high_refine/low_model.zip",
+      "low_model_hash": "f04a620ac0ae0d3a"
+    }
+  ]
+}

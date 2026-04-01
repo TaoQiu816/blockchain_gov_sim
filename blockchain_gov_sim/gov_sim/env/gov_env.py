@@ -1,12 +1,4 @@
-"""Gymnasium 联盟链治理环境。
-
-环境闭环：
-`reset -> 场景生成 -> 证据生成 -> 信誉更新 -> action mask -> step(action)
- -> 委员会抽样 -> 链侧性能/安全 -> reward/cost/info -> 下一时刻观测`
-
-该环境是第四章实验的统一入口，训练、评估、benchmark、ablation、baseline
-都通过它执行，从而保证所有比较都在同一仿真语义下完成。
-"""
+"""单层离散治理 CMDP 环境。"""
 
 from __future__ import annotations
 
@@ -16,26 +8,23 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-from gov_sim.constants import ACTION_DIM, EPS
+from gov_sim.constants import ACTION_DIM, EPS, H_MIN, H_WARN, M_MIN, THETA_CHOICES, TR_MIN
 from gov_sim.env.action_codec import ActionCodec, GovernanceAction
-from gov_sim.env.action_mask import build_action_mask, is_action_legal
-from gov_sim.env.observation_builder import build_state_vector
+from gov_sim.env.action_mask import build_action_mask, resolve_action_with_fallback
+from gov_sim.env.observation_builder import build_state_vector, state_vector_dim
 from gov_sim.env.reward_cost import compute_cost, compute_reward
 from gov_sim.modules.chain_model import ChainModel
-from gov_sim.modules.committee_sampler import CommitteeSampler
-from gov_sim.modules.evidence_generator import EvidenceGenerator
-from gov_sim.modules.evidence_generator import EvidenceBatch
+from gov_sim.modules.evidence_generator import EvidenceBatch, EvidenceGenerator
 from gov_sim.modules.reputation_model import ReputationModel, ReputationSnapshot
 from gov_sim.modules.scenario_model import ScenarioModel, ScenarioStep
 
 
-class BlockchainGovEnv(gym.Env[dict[str, np.ndarray], int]):
-    """面向联盟链治理的 Gymnasium 环境。
+class BlockchainGovEnv(gym.Env[np.ndarray, int]):
+    """联盟链治理单层环境。
 
-    设计原则：
-    - 观测采用 `Dict(state, action_mask)`，便于与 MaskablePPO 对接；
-    - 动作为扁平 400 维离散动作；
-    - `info` 尽量返回完整审计指标，便于论文作图与结果复核。
+    接口：
+    - reset() -> obs, legal_mask, info
+    - step(action_idx) -> next_obs, next_legal_mask, reward, cost, done, info
     """
 
     metadata = {"render_modes": []}
@@ -43,59 +32,81 @@ class BlockchainGovEnv(gym.Env[dict[str, np.ndarray], int]):
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__()
         self.config = config
+        self.env_cfg = config["env"]
+        self.eval_cfg = config.get("eval", {})
         self.base_seed = int(config["seed"])
         self.seed_value = self.base_seed
         self.episode_counter = 0
         self.current_episode_seed = self.base_seed
-        self.env_cfg = config["env"]
-        self.eval_cfg = config.get("eval", {})
         self.num_rsus = int(self.env_cfg["num_rsus"])
         self.horizon = int(self.env_cfg["episode_length"])
+        self.m_min = int(self.env_cfg.get("m_min", M_MIN))
+        self.tr_min = float(TR_MIN)
+        self.h_min = float(H_MIN)
+        self.h_warn = float(H_WARN)
         self.codec = ActionCodec()
-        self.default_action = GovernanceAction(m=11, b=256, tau=40, theta=0.6)
+        self.default_action = GovernanceAction(rho_m=7.0 / 27.0, theta=0.50, b=384, tau=80)
+        self.default_action_idx = self.codec.encode(self.default_action)
         self.prev_action = self.default_action
+        self.prev_action_idx = self.default_action_idx
+
         self.action_space = spaces.Discrete(ACTION_DIM)
-        # 状态向量维度 = 6 个全局统计 + 5 个信誉分位数 + bins 个信誉直方图
-        # + 4 个维度 * (1 个均值 + 3 个分位数) + 4 个上一步动作归一化特征
-        self.state_dim = 31 + int(self.env_cfg["observation_hist_bins"])
-        self.observation_space = spaces.Dict(
-            {
-                "state": spaces.Box(low=-1.0e6, high=1.0e6, shape=(self.state_dim,), dtype=np.float32),
-                "action_mask": spaces.Box(low=0, high=1, shape=(ACTION_DIM,), dtype=np.int8),
-            }
-        )
+        self.observation_space = spaces.Box(low=-10.0, high=10.0, shape=(state_vector_dim(),), dtype=np.float32)
 
         self.scenario = ScenarioModel(
             config=config["scenario"],
             num_rsus=self.num_rsus,
             malicious_ratio=float(self.env_cfg["malicious_ratio"]),
             seed=self.seed_value,
+            episode_length=self.horizon,
         )
         self.evidence_generator = EvidenceGenerator(config=config["scenario"], seed=self.seed_value)
         self.reputation_model = ReputationModel(config=config["reputation"], num_rsus=self.num_rsus)
-        self.committee_sampler = CommitteeSampler(seed=self.seed_value)
-        self.chain_model = ChainModel(config=config["chain"], h_min=float(self.env_cfg["h_min"]))
+        self.chain_model = ChainModel(config=config["chain"], h_min=self.h_min)
+
         self.epoch = 0
         self.queue_size = 0.0
         self.last_latency = 0.0
+        self.prev_rtt = 0.0
         self.current_scenario: ScenarioStep | None = None
         self.current_snapshot: ReputationSnapshot | None = None
-        self.current_obs: dict[str, np.ndarray] | None = None
-        self.current_mask = np.ones(ACTION_DIM, dtype=np.int8)
-        self.current_context = np.zeros(6, dtype=np.float32)
-        self.last_info: dict[str, Any] = {}
         self.current_evidence: EvidenceBatch | None = None
-        self.committee_override_method: str | None = None
+        self.current_obs = np.zeros(state_vector_dim(), dtype=np.float32)
+        self.current_mask = np.ones(ACTION_DIM, dtype=np.int8)
+        self.current_eligible_counts: dict[float, int] = {float(theta): self.num_rsus for theta in THETA_CHOICES}
+        self.last_info: dict[str, Any] = {}
+
+        self.arrival_max = self._estimate_arrival_max()
+        self.queue_max = float(self.env_cfg.get("Q_max", max(self.arrival_max * self.horizon, 1.0)))
+        self.rtt_max = float(self.env_cfg.get("RTT_max", self._estimate_rtt_max()))
+
+    def _estimate_arrival_max(self) -> float:
+        scenario_cfg = self.config["scenario"]
+        base_values: list[float] = []
+        for name in ("stable", "step"):
+            if name in scenario_cfg and "lambda" in scenario_cfg[name]:
+                lam = float(scenario_cfg[name]["lambda"])
+                if name == "step":
+                    lam *= float(scenario_cfg[name].get("k", 1.0))
+                base_values.append(lam)
+        if "mmpp" in scenario_cfg:
+            base_values.extend(float(value) for value in scenario_cfg["mmpp"].get("lambdas", []))
+        mix_cfg = scenario_cfg.get("training_mix", {}).get("profiles", {})
+        for profile in mix_cfg.values():
+            if "high_lambda_scale" in profile:
+                base_values.append(max(base_values or [1.0]) * float(profile["high_lambda_scale"]))
+        return max(base_values or [1.0])
+
+    def _estimate_rtt_max(self) -> float:
+        network_cfg = self.config["scenario"].get("network", {})
+        rtt_max = float(network_cfg.get("rtt_max", 1.0))
+        mix_cfg = self.config["scenario"].get("training_mix", {}).get("profiles", {})
+        for profile in mix_cfg.values():
+            if "rtt_max" in profile:
+                rtt_max = max(rtt_max, float(profile["rtt_max"]))
+        return rtt_max
 
     def _next_episode_seed(self, seed: int | None) -> int:
-        """派生本轮 episode 的局部随机种子。
-
-        设计目标：
-        - 显式 `reset(seed=x)` 时，轨迹对同一 seed 严格可复现；
-        - 训练中无显式 seed 的连续 reset 会得到不同 episode；
-        - 不在这里重置全局 torch / numpy / random 状态，避免训练分布退化。
-        """
-
         if seed is not None:
             self.base_seed = int(seed)
             self.episode_counter = 1
@@ -104,287 +115,289 @@ class BlockchainGovEnv(gym.Env[dict[str, np.ndarray], int]):
         self.episode_counter += 1
         return int(episode_seed)
 
-    def _eligible_nodes(self, theta: float) -> np.ndarray:
-        """按照当前信誉快照与动作门槛 `theta` 计算资格集。"""
+    def _snapshot_trust(self) -> np.ndarray:
+        if self.current_snapshot is None:
+            return np.zeros(self.num_rsus, dtype=np.float32)
+        return np.asarray(self.current_snapshot.final_scores, dtype=np.float32)
 
-        if self.current_snapshot is None or self.current_scenario is None:
+    def _eligible_nodes(self, theta: float) -> np.ndarray:
+        if self.current_snapshot is None:
             return np.array([], dtype=np.int64)
-        mask = (
-            (self.current_snapshot.final_scores >= theta)
-            & (self.current_scenario.online == 1)
-            & (self.current_scenario.uptime >= float(self.env_cfg["u_min"]))
+        return np.asarray(self.current_snapshot.eligible_sets.get(float(theta), np.array([], dtype=np.int64)), dtype=np.int64)
+
+    def _build_context(self, eligible_size_hint: int) -> np.ndarray:
+        rtt = float(self.current_scenario.rtt if self.current_scenario is not None else 0.0)
+        delta_rtt = rtt - float(self.prev_rtt)
+        return np.asarray(
+            [
+                float(self.current_scenario.arrivals if self.current_scenario is not None else 0.0),
+                float(self.queue_size),
+                float(self.queue_size),
+                rtt,
+                delta_rtt,
+                float(self.current_scenario.churn if self.current_scenario is not None else 0.0),
+                float(eligible_size_hint),
+                0.0,
+                0.0,
+                0.0,
+            ],
+            dtype=np.float32,
         )
-        return np.where(mask)[0].astype(np.int64)
+
+    def _build_observation(self) -> np.ndarray:
+        trust_scores = self._snapshot_trust()
+        if self.current_scenario is None:
+            raise RuntimeError("Scenario is not initialized.")
+        online_mask = self.current_scenario.online == 1
+        online_scores = trust_scores[online_mask]
+        mean_trust = float(np.mean(online_scores)) if online_scores.size > 0 else 0.0
+        std_trust = float(np.std(online_scores)) if online_scores.size > 0 else 0.0
+        return build_state_vector(
+            A_e=float(self.current_scenario.arrivals),
+            Q_e=float(self.queue_size),
+            RTT_e=float(self.current_scenario.rtt),
+            delta_RTT_e=float(self.current_scenario.rtt - self.prev_rtt),
+            churn_ratio_e=float(self.current_scenario.churn),
+            online_ratio_e=float(np.mean(self.current_scenario.online)),
+            mean_trust_e=mean_trust,
+            std_trust_e=std_trust,
+            n_045=int(self.current_eligible_counts[0.45]),
+            n_050=int(self.current_eligible_counts[0.50]),
+            n_055=int(self.current_eligible_counts[0.55]),
+            n_060=int(self.current_eligible_counts[0.60]),
+            previous_action_idx=int(self.prev_action_idx),
+            A_max=self.arrival_max,
+            Q_max=self.queue_max,
+            RTT_max=self.rtt_max,
+            N_RSU=self.num_rsus,
+        )
 
     def _prepare_epoch(self) -> None:
-        """生成当前周期观测所需的全部中间量。
-
-        顺序不可随意改变：
-        1. 先生成场景；
-        2. 再基于场景生成证据；
-        3. 再更新信誉；
-        4. 最后根据新信誉构造 action mask 与观测。
-        """
-
-        base_eligible = self._eligible_nodes(self.prev_action.theta).size if self.current_snapshot is not None else self.num_rsus
+        base_eligible = int(self.current_eligible_counts.get(float(self.prev_action.theta), self.num_rsus))
         self.current_scenario = self.scenario.step(
             epoch=self.epoch,
             queue_size=self.queue_size,
             last_latency=self.last_latency,
             eligible_size=base_eligible,
         )
-        context = np.asarray(
-            [
-                float(self.current_scenario.arrivals),
-                float(self.queue_size),
-                float(self.last_latency),
-                float(self.current_scenario.rtt),
-                float(self.current_scenario.churn),
-                float(base_eligible),
-            ],
-            dtype=np.float32,
-        )
-        evidence = self.evidence_generator.generate(
+        self.current_evidence = self.evidence_generator.generate(
             epoch=self.epoch,
             base_probs=self.current_scenario.base_probs,
             malicious=self.current_scenario.malicious,
             online=self.current_scenario.online,
             uptime=self.current_scenario.uptime,
         )
-        self.current_evidence = evidence
-        self.current_snapshot = self.reputation_model.update(context=context, evidence=evidence)
-        self.current_context = context
+        self.current_snapshot = self.reputation_model.update(
+            context=self._build_context(base_eligible),
+            evidence=self.current_evidence,
+        )
+        self.current_eligible_counts = dict(self.current_snapshot.eligible_counts)
         self.current_mask = build_action_mask(
             codec=self.codec,
-            prev_action=self.prev_action,
-            trust_scores=self.current_snapshot.final_scores,
-            uptime=self.current_scenario.uptime,
-            online=self.current_scenario.online,
-            u_min=float(self.env_cfg["u_min"]),
-            delta_m_max=int(self.env_cfg["delta_m_max"]),
-            delta_b_max=int(self.env_cfg["delta_b_max"]),
-            delta_tau_max=int(self.env_cfg["delta_tau_max"]),
-            delta_theta_max=float(self.env_cfg["delta_theta_max"]),
-            unsafe_guard=bool(self.env_cfg["unsafe_action_guard"]),
-            h_min=float(self.env_cfg["h_min"]),
+            eligible_counts_by_theta=self.current_eligible_counts,
+            m_min=self.m_min,
         )
-        mask_to_show = self.current_mask if bool(self.env_cfg.get("mask_illegal_actions", True)) else np.ones_like(self.current_mask)
-        summary = {
-            "A_e": float(self.current_scenario.arrivals),
-            "Q_e": float(self.queue_size),
-            "L_bar_e": float(self.last_latency),
-            "RTT_e": float(self.current_scenario.rtt),
-            "chi_e": float(self.current_scenario.churn),
-            "eligible_size": float(self._eligible_nodes(self.prev_action.theta).size),
-        }
-        state_vector = build_state_vector(
-            summary=summary,
-            snapshot=self.current_snapshot,
-            prev_action=self.prev_action,
-            bins=int(self.env_cfg["observation_hist_bins"]),
-        )
-        self.current_obs = {"state": state_vector, "action_mask": mask_to_show.astype(np.int8)}
+        self.current_obs = self._build_observation()
 
-    def _copy_obs(self) -> dict[str, np.ndarray]:
-        """返回当前观测的深拷贝，避免外部持有环境内部数组引用。"""
+    def _select_committee(self, action: GovernanceAction, eligible_nodes: np.ndarray) -> tuple[np.ndarray, int]:
+        mapped_m = self.codec.mapped_committee_size(action.rho_m, int(eligible_nodes.size), m_min=self.m_min)
+        if mapped_m < self.m_min or eligible_nodes.size < mapped_m:
+            return np.array([], dtype=np.int64), 0
+        trust_scores = self._snapshot_trust()[eligible_nodes]
+        order = np.lexsort((eligible_nodes, -trust_scores))
+        committee = eligible_nodes[order[:mapped_m]].astype(np.int64)
+        return committee, int(mapped_m)
 
-        if self.current_obs is None:
-            raise RuntimeError("Current observation is not initialized.")
-        return {
-            "state": np.copy(self.current_obs["state"]),
-            "action_mask": np.copy(self.current_obs["action_mask"]),
-        }
+    def _mapped_target_committee_size(self, action: GovernanceAction, eligible_size: int) -> int:
+        mapped_m = self.codec.mapped_committee_size(action.rho_m, int(eligible_size), m_min=self.m_min)
+        if int(eligible_size) < self.m_min:
+            return int(self.m_min)
+        return int(mapped_m)
 
-    def action_masks(self) -> np.ndarray:
-        """兼容 MaskablePPO 常见接口，返回布尔 mask。"""
-        return self.current_mask.astype(bool)
+    @staticmethod
+    def _action_tuple(action: GovernanceAction, committee_size: int) -> tuple[float, float, int, int, int]:
+        return (float(action.rho_m), float(action.theta), int(action.b), int(action.tau), int(committee_size))
 
-    def get_governance_state(self) -> dict[str, Any]:
-        """向 baseline / 调试器暴露环境内部治理状态。"""
-        if self.current_snapshot is None or self.current_scenario is None:
-            raise RuntimeError("Environment not initialized; call reset() first.")
-        return {
-            "epoch": self.epoch,
-            "queue_size": self.queue_size,
-            "snapshot": self.current_snapshot,
-            "scenario": self.current_scenario,
-            "prev_action": self.prev_action,
-            "mask": self.current_mask.copy(),
-            "committee_method": self.committee_override_method or str(self.env_cfg.get("committee_method", "soft_sortition")),
-        }
-
-    def _resolve_action(self, action_idx: int) -> tuple[GovernanceAction, int]:
-        """解析动作并在需要时处理非法动作。
-
-        - 正常训练：非法动作通过 mask 预先屏蔽，几乎不会发生；
-        - 消融 `no_action_mask`：允许策略选到非法动作，但会打 reward penalty；
-        - 若启用 mask 且仍传入非法动作，则回退到当前 mask 的首个合法动作。
-        """
-
-        requested = self.codec.decode(int(action_idx))
-        legal = is_action_legal(
-            action=requested,
-            prev_action=self.prev_action,
-            trust_scores=self.current_snapshot.final_scores,
-            uptime=self.current_scenario.uptime,
-            online=self.current_scenario.online,
-            u_min=float(self.env_cfg["u_min"]),
-            delta_m_max=int(self.env_cfg["delta_m_max"]),
-            delta_b_max=int(self.env_cfg["delta_b_max"]),
-            delta_tau_max=int(self.env_cfg["delta_tau_max"]),
-            delta_theta_max=float(self.env_cfg["delta_theta_max"]),
-            unsafe_guard=bool(self.env_cfg["unsafe_action_guard"]),
-            h_min=float(self.env_cfg["h_min"]),
-        )
-        if legal or not bool(self.env_cfg.get("mask_illegal_actions", True)):
-            return requested, int(not legal)
-        fallback_idx = int(np.flatnonzero(self.current_mask)[0])
-        return self.codec.decode(fallback_idx), 1
-
-    def _sample_committee(self, action: GovernanceAction, eligible_nodes: np.ndarray) -> np.ndarray:
-        """根据当前策略/基线指定的委员会机制采样委员会。"""
-        if eligible_nodes.size == 0:
-            return np.array([], dtype=np.int64)
-        method = self.committee_override_method or str(self.env_cfg.get("committee_method", "soft_sortition"))
-        if method == "topk":
-            scores = self.current_snapshot.final_scores[eligible_nodes]
-            top_idx = np.argsort(scores)[-action.m :][::-1]
-            return eligible_nodes[top_idx].astype(np.int64)
-        beta_s = float(self.env_cfg.get("soft_sortition_beta", 6.0))
-        logits = beta_s * self.current_snapshot.final_scores[eligible_nodes]
-        logits = logits - np.max(logits)
-        weights = np.exp(logits) + EPS
-        weights = weights / np.sum(weights)
-        return self.committee_sampler.sample(candidates=eligible_nodes, weights=weights, committee_size=action.m)
-
-    def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
-        """重置环境并返回首个观测。
-
-        这里为每个 episode 派生独立局部 seed，并传递给内部随机模块，确保：
-        - 同一 base seed 下整次训练可复现；
-        - 同一训练 run 内，不同 episode 不会反复复制同一条样本路径。
-        """
-
+    def reset(self, seed: int | None = None) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
         episode_seed = self._next_episode_seed(seed)
         self.seed_value = episode_seed
         self.current_episode_seed = episode_seed
-        if options and "config_override" in options:
-            raise ValueError("config_override is not supported at env.reset(); create a new env instead.")
         self.epoch = 0
         self.queue_size = 0.0
         self.last_latency = 0.0
+        self.prev_rtt = 0.0
         self.prev_action = self.default_action
-        self.committee_override_method = None
+        self.prev_action_idx = self.default_action_idx
+        self.current_obs = np.zeros(state_vector_dim(), dtype=np.float32)
+        self.current_mask = np.ones(ACTION_DIM, dtype=np.int8)
+        self.current_eligible_counts = {float(theta): self.num_rsus for theta in THETA_CHOICES}
         self.action_space.seed(episode_seed)
         self.scenario.reset(seed=episode_seed)
         self.evidence_generator.reset(seed=episode_seed)
         self.reputation_model.reset()
-        self.committee_sampler.reset(seed=episode_seed)
         self.chain_model.reset()
         self._prepare_epoch()
-        self.last_info = {"reset": True, "episode_seed": episode_seed}
-        return self._copy_obs(), self.last_info.copy()
+        self.last_info = {
+            "reset": True,
+            "episode_seed": int(episode_seed),
+            "scenario_type": str(self.current_scenario.scenario_type if self.current_scenario is not None else "unknown"),
+        }
+        return self.current_obs.copy(), self.current_mask.copy(), self.last_info.copy()
 
-    def step(self, action: int) -> tuple[dict[str, np.ndarray], float, bool, bool, dict[str, Any]]:
-        """执行一个治理周期。
+    def step(self, action_idx: int) -> tuple[np.ndarray, np.ndarray, float, float, bool, dict[str, Any]]:
+        if self.current_scenario is None or self.current_snapshot is None:
+            raise RuntimeError("Environment not initialized; call reset() first.")
 
-        流程：
-        1. 解码并校验动作；
-        2. 按 `theta_e` 计算资格集；
-        3. 软抽签或 Top-K 生成委员会；
-        4. 计算链侧性能、安全状态、reward 与 cost；
-        5. 更新队列、延迟、上一步动作；
-        6. 若未终止，则准备下一周期观测。
-        """
+        requested_action, executed_action, was_fallback, structural_from_mask = resolve_action_with_fallback(
+            codec=self.codec,
+            requested_idx=int(action_idx),
+            mask=self.current_mask,
+            eligible_counts_by_theta=self.current_eligible_counts,
+        )
+        requested_idx = int(action_idx)
+        executed_idx = self.codec.encode(executed_action)
+        eligible_nodes = self._eligible_nodes(executed_action.theta)
+        eligible_size = int(eligible_nodes.size)
+        mapped_m_e = self._mapped_target_committee_size(executed_action, eligible_size)
+        committee, committee_size = self._select_committee(executed_action, eligible_nodes)
+        structural_infeasible = int(structural_from_mask or eligible_size < mapped_m_e)
+        committee_mean_trust = float(np.mean(self._snapshot_trust()[committee])) if committee.size > 0 else 0.0
 
-        if self.current_obs is None or self.current_snapshot is None or self.current_scenario is None:
-            raise RuntimeError("Environment not initialized; call reset() before step().")
-        chosen_action, invalid_action = self._resolve_action(int(action))
-        eligible_nodes = self._eligible_nodes(chosen_action.theta)
-        effective_committee_size = min(chosen_action.m, int(eligible_nodes.size))
-        committee = self._sample_committee(GovernanceAction(effective_committee_size, chosen_action.b, chosen_action.tau, chosen_action.theta), eligible_nodes)
         chain_result = self.chain_model.step(
             queue_size=self.queue_size,
-            arrivals=self.current_scenario.arrivals,
+            arrivals=int(self.current_scenario.arrivals),
+            eligible_size=eligible_size,
             committee=committee,
-            committee_size=effective_committee_size,
-            batch_size=chosen_action.b,
-            tau_ms=chosen_action.tau,
-            rtt=self.current_scenario.rtt,
-            churn=self.current_scenario.churn,
-            uptime=self.current_scenario.uptime,
+            committee_size=int(committee_size),
+            batch_size=int(executed_action.b),
+            tau_ms=int(executed_action.tau),
+            rtt=float(self.current_scenario.rtt),
+            churn=float(self.current_scenario.churn),
+            committee_trust_scores=self._snapshot_trust()[committee] if committee.size > 0 else np.array([], dtype=np.float32),
             malicious=self.current_scenario.malicious,
+        )
+
+        unsafe = int(committee_mean_trust < self.h_min)
+        timeout = int(float(chain_result.consensus_latency) > float(executed_action.tau))
+        margin = (
+            float(np.clip((self.h_warn - committee_mean_trust) / max(self.h_warn - self.h_min, EPS), 0.0, 1.0))
+            if committee_size > 0
+            else 1.0
         )
         reward, reward_terms = compute_reward(
             config=self.env_cfg,
-            service_capacity=chain_result.service_capacity,
-            latency=chain_result.total_latency,
-            queue_next=chain_result.queue_next,
-            action=chosen_action,
+            served=float(chain_result.service_capacity),
+            latency=float(chain_result.total_latency),
+            queue_next=float(chain_result.queue_next),
+            batch_size=int(executed_action.b),
+            action=executed_action,
             prev_action=self.prev_action,
         )
         cost, cost_terms = compute_cost(
             config=self.env_cfg,
-            unsafe=chain_result.unsafe,
-            honest_ratio=chain_result.honest_ratio,
+            unsafe=unsafe,
+            timeout_failure=timeout,
+            margin_cost=margin,
         )
-        reward -= invalid_action * float(self.env_cfg["invalid_action_penalty"])
-        reward_terms["invalid_action"] = -invalid_action * float(self.env_cfg["invalid_action_penalty"])
 
-        malicious_threshold = float(self.eval_cfg.get("malicious_threshold", 0.45))
-        trust_scores = self.current_snapshot.final_scores.copy()
-        malicious_pred = (trust_scores < malicious_threshold).astype(np.int8)
-        # `info` 作为审计总线，尽量把论文中关心的链侧指标和信誉侧指标都带出去。
         info = {
-            "epoch": self.epoch,
+            "epoch": int(self.epoch),
             "episode_seed": int(self.current_episode_seed),
+            "scenario_type": str(self.current_scenario.scenario_type),
+            "scenario_phase": str(self.current_scenario.scenario_phase),
+            "unsafe": int(unsafe),
+            "timeout": int(timeout),
+            "timeout_failure": int(timeout),
+            "structural_infeasible": int(structural_infeasible),
+            "eligible_size": eligible_size,
+            "committee_size": int(committee_size),
+            "committee_formed": int(committee_size > 0),
+            "committee_mean_trust": float(committee_mean_trust),
+            "pollute_rate": float(self.current_evidence.pollute_rate if self.current_evidence is not None else 0.0),
+            "queue": float(self.queue_size),
+            "queue_next": float(chain_result.queue_next),
+            "served": float(chain_result.service_capacity),
+            "latency": float(chain_result.total_latency),
+            "action_tuple": self._action_tuple(executed_action, committee_size),
+            "was_fallback": bool(was_fallback),
+            "requested_action": (
+                float(requested_action.rho_m),
+                float(requested_action.theta),
+                int(requested_action.b),
+                int(requested_action.tau),
+            ),
+            "executed_action": (
+                float(executed_action.rho_m),
+                float(executed_action.theta),
+                int(executed_action.b),
+                int(executed_action.tau),
+            ),
+            "reward": float(reward),
+            "cost": float(cost),
+            "reward_terms": reward_terms,
+            "cost_terms": cost_terms,
             "A_e": int(self.current_scenario.arrivals),
             "Q_e": float(self.queue_size),
+            "B_e": float(chain_result.effective_batch),
             "S_e": float(chain_result.service_capacity),
+            "Q_next": float(chain_result.queue_next),
+            "L_queue": float(chain_result.queue_latency),
+            "L_batch": float(chain_result.batch_latency),
+            "L_cons": float(chain_result.consensus_latency),
+            "L_e": float(chain_result.total_latency),
             "L_queue_e": float(chain_result.queue_latency),
             "L_batch_e": float(chain_result.batch_latency),
             "L_cons_e": float(chain_result.consensus_latency),
             "L_bar_e": float(chain_result.total_latency),
             "RTT_e": float(self.current_scenario.rtt),
-            "chi_e": float(self.current_scenario.churn),
-            "h_e": float(chain_result.honest_ratio),
-            "U_e": int(chain_result.unsafe),
-            "Z_e": int(chain_result.success),
-            "m_e": int(chosen_action.m),
-            "b_e": int(chosen_action.b),
-            "tau_e": int(chosen_action.tau),
-            "theta_e": float(chosen_action.theta),
-            "eligible_size": int(eligible_nodes.size),
-            "executed_committee_size": int(effective_committee_size),
-            "pollute_rate": float(self.current_evidence.pollute_rate if self.current_evidence is not None else 0.0),
-            "unsafe": int(chain_result.unsafe),
-            "reward_terms": reward_terms,
-            "cost_terms": cost_terms,
-            "reward": float(reward),
-            "cost": float(cost),
-            "timeout_failure": int(chain_result.timeout_failure),
-            "leader_unstable": int(chain_result.leader_unstable),
-            "tps": float(chain_result.tps),
-            "mask_ratio": float(np.mean(self.current_mask)),
-            "queue_next": float(chain_result.queue_next),
-            "invalid_action": int(invalid_action),
+            "delta_RTT_e": float(self.current_scenario.rtt - self.prev_rtt),
+            "churn_ratio_e": float(self.current_scenario.churn),
+            "online_ratio_e": float(np.mean(self.current_scenario.online)),
+            "margin_e": float(margin),
+            "h_LCB": float(chain_result.h_lcb),
+            "h_LCB_e": float(chain_result.h_lcb),
+            "mapped_m_e": int(mapped_m_e),
+            "m_e": int(mapped_m_e),
+            "rho_m_e": float(executed_action.rho_m),
+            "theta_e": float(executed_action.theta),
+            "b_e": int(executed_action.b),
+            "tau_e": int(executed_action.tau),
+            "requested_action_idx": int(requested_idx),
+            "executed_action_idx": int(executed_idx),
+            "used_fallback_action": int(was_fallback),
+            "trust_scores": self._snapshot_trust().astype(float).tolist(),
             "committee_members": committee.astype(int).tolist(),
-            "dim_weights": {key: float(value) for key, value in self.current_snapshot.dim_weights.items()},
-            "context_vector": self.current_context.astype(float).tolist(),
-            "trust_scores": trust_scores.tolist(),
-            "malicious_true": self.current_scenario.malicious.astype(np.int8).tolist(),
-            "malicious_pred": malicious_pred.tolist(),
+            "qualified_node_count_mean": float(eligible_size),
+            "qualified_node_count": int(eligible_size),
+            "action_distribution_key": f"{float(executed_action.rho_m):.6f}|{float(executed_action.theta):.2f}|{int(executed_action.b)}|{int(executed_action.tau)}",
+            "tps": float(chain_result.tps),
         }
-        self.queue_size = chain_result.queue_next
-        self.last_latency = chain_result.total_latency
-        self.prev_action = chosen_action
-        terminated = self.epoch + 1 >= self.horizon
-        truncated = False
+
+        self.queue_size = float(chain_result.queue_next)
+        self.last_latency = float(chain_result.total_latency)
+        self.prev_rtt = float(self.current_scenario.rtt)
+        self.prev_action = executed_action
+        self.prev_action_idx = executed_idx
+        done = bool(self.epoch + 1 >= self.horizon)
         self.epoch += 1
-        if not terminated:
+        if not done:
             self._prepare_epoch()
-            next_obs = self._copy_obs()
-        else:
-            next_obs = self._copy_obs()
         self.last_info = info
-        return next_obs, float(reward), terminated, truncated, info
+        return self.current_obs.copy(), self.current_mask.copy(), float(reward), float(cost), done, info
+
+    def action_masks(self) -> np.ndarray:
+        return self.current_mask.astype(bool)
+
+    def get_governance_state(self) -> dict[str, Any]:
+        if self.current_snapshot is None or self.current_scenario is None:
+            raise RuntimeError("Environment not initialized; call reset() first.")
+        return {
+            "epoch": int(self.epoch),
+            "queue_size": float(self.queue_size),
+            "snapshot": self.current_snapshot,
+            "scenario": self.current_scenario,
+            "mask": self.current_mask.copy(),
+            "eligible_counts_by_theta": dict(self.current_eligible_counts),
+            "previous_action_idx": int(self.prev_action_idx),
+            "previous_action": self.prev_action,
+        }

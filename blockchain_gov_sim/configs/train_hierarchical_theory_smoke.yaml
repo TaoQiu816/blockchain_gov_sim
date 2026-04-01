@@ -1,0 +1,43 @@
+output_root: outputs/theory_smoke
+
+eval:
+  episodes: 4
+  deterministic: true
+
+hierarchical:
+  update_interval: 10
+  stage1:
+    train_mode: oracle_supervised
+    pretrained_model_path: ""
+    total_timesteps: 4000
+    dataset:
+      scenario_names: [load_shock, high_rtt_burst, churn_burst, malicious_burst]
+      high_template_coverage: all
+      max_states_per_phase: 6
+      max_episodes_per_scenario: 4
+    supervised:
+      batch_size: 64
+  stage2:
+    total_base_timesteps: 4000
+  stage3:
+    rounds: 1
+    low_base_timesteps_per_round: 1000
+    high_base_timesteps_per_round: 2000
+    low_actor_train_mode: frozen
+  low_agent:
+    learning_rate: 2.5e-4
+    n_steps: 256
+    batch_size: 64
+    n_epochs: 4
+    ent_coef: 0.01
+  high_agent:
+    learning_rate: 2.5e-4
+    n_steps: 64
+    batch_size: 32
+    n_epochs: 4
+    ent_coef: 0.01
+    cost_limit: 0.10
+  compare:
+    episodes: 4
+    skip_flat_comparator: true
+    flat_model_path: outputs/finalized_flat_compare/train/hard_seed42_flat_finalized/model

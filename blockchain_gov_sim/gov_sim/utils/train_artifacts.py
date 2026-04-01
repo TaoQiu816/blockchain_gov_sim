@@ -96,6 +96,20 @@ def generate_train_artifacts(run_dir: str | Path) -> None:
     train_df = pd.read_csv(train_log_path)
     # 兼容论文中的 `train_metrics.csv` 命名。
     train_df.to_csv(directory / "train_metrics.csv", index=False)
+    
+    # 导出统一的日志摘要
+    try:
+        from gov_sim.utils.log_export import export_training_summary
+        step_log_path = directory / "train_log_steps.csv"
+        audit_path = directory / "train_audit.json"
+        export_training_summary(
+            stage_dir=directory,
+            episode_log_path=train_log_path,
+            step_log_path=step_log_path if step_log_path.exists() else None,
+            audit_path=audit_path if audit_path.exists() else None,
+        )
+    except Exception:
+        pass  # 不影响主流程
 
     if not train_df.empty:
         x = np.arange(len(train_df))
@@ -148,7 +162,7 @@ def generate_train_artifacts(run_dir: str | Path) -> None:
             ("episode_repeat_ratio", "Episode Repeat Ratio"),
             ("recent_unique_trajectory_count", "Recent Unique Trajectories"),
             ("eligible_size_mean", "Eligible Size Mean"),
-            ("rolling_reward_mean", "Rolling Reward Mean"),
+            ("committee_mean_trust_mean", "Committee Mean Trust"),
         ]
         if any(column in train_df.columns for column, _ in health_series):
             fig, axes = plt.subplots(2, 2, figsize=(12, 8))

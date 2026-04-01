@@ -1,14 +1,4 @@
-"""链侧性能与安全模型。
-
-该文件把治理动作 `(m, b, tau, theta)` 与当前场景状态映射为：
-
-- 排队/批处理/共识时延
-- 安全破缺与超时失败
-- 有效服务量与队列更新
-- TPS 与总确认时延
-
-它对应第四章的“联盟链链侧治理”主体，不涉及 DAG 卸载本身。
-"""
+"""链侧性能模型。"""
 
 from __future__ import annotations
 
@@ -20,101 +10,109 @@ import numpy as np
 
 @dataclass
 class ChainStepResult:
-    """链侧一步执行结果。
-
-    为了便于审计，环境会将这里的大部分字段原样写入 `info`。
-    """
+    """链侧一步执行结果。"""
 
     queue_next: float
     service_capacity: float
+    arrival_hat: float
+    wait_to_fill: float
+    effective_batch: float
+    mu_eff: float
     queue_latency: float
     batch_latency: float
     consensus_latency: float
     total_latency: float
-    honest_ratio: float
+    committee_mean_trust: float
     unsafe: int
-    success: int
-    leader_unstable: int
     timeout_failure: int
+    success: int
+    margin_cost: float
+    block_slack: float
     tps: float
+    h_lcb: float
 
 
 class ChainModel:
-    """联盟链单周期性能/安全近似模型。"""
+    """保留已审计性能结构的链侧模型。"""
 
     def __init__(self, config: dict[str, Any], h_min: float) -> None:
         self.cfg = config
-        self.h_min = h_min
-        self.lambda_hat = 1.0
+        self.h_min = float(h_min)
+        self.arrival_hat = float(config.get("initial_arrival_hat", 1.0))
 
     def reset(self) -> None:
-        self.lambda_hat = 1.0
+        self.arrival_hat = float(self.cfg.get("initial_arrival_hat", 1.0))
 
     def step(
         self,
         queue_size: float,
         arrivals: int,
+        eligible_size: int,
         committee: np.ndarray,
         committee_size: int,
         batch_size: int,
         tau_ms: int,
         rtt: float,
         churn: float,
-        uptime: np.ndarray,
+        committee_trust_scores: np.ndarray,
         malicious: np.ndarray,
     ) -> ChainStepResult:
-        """计算一次治理动作下的链侧执行结果。
+        eps = 1.0e-8
+        delta_t_ms = float(self.cfg.get("delta_t_ms", 100.0))
+        self.arrival_hat = float(self.cfg["lambda_ewma"]) * self.arrival_hat + (1.0 - float(self.cfg["lambda_ewma"])) * float(arrivals)
+        x_total = float(queue_size) + float(arrivals)
+        effective_batch = min(x_total, float(batch_size))
+        pair_term = float(committee_size * max(committee_size - 1, 0) / 2.0)
+        structural_feasible = int(int(eligible_size) >= int(committee_size) and int(committee_size) > 0)
 
-        公式对应关系：
-        - `S_tilde = min(Q_e + A_e, b_e)`
-        - `L_queue = c_q * Q_e / (S_tilde + eps)`
-        - `L_batch = min(tau_e, [b_e-(Q_e+A_e)]_+ / (lambda_hat + eps))`
-        - `L_cons` 同时受 RTT、churn、committee size、leader instability 影响
-        - `Z_e = 1[h_e >= h_min] * 1[L_cons <= tau_view]`
-        - `S_e = Z_e * S_tilde`
-        - `Q_{e+1} = max(0, Q_e + A_e - S_e)`
-
-        注意：
-        共识成功不是只看诚实比例，而是“诚实比例 + 超时”双条件。
-        """
-
-        self.lambda_hat = float(self.cfg["lambda_ewma"]) * self.lambda_hat + (1.0 - float(self.cfg["lambda_ewma"])) * float(arrivals)
-        staged = min(queue_size + arrivals, batch_size)
-        queue_latency = float(self.cfg["cq"]) * queue_size / max(staged, 1.0)
-        batch_slack = max(batch_size - (queue_size + arrivals), 0.0)
-        batch_latency = min(float(tau_ms), batch_slack / max(self.lambda_hat, 1.0))
-        leader_unstable = 0
-        if committee.size > 0:
-            leader_unstable = int(float(np.min(uptime[committee])) < float(self.cfg["leader_instability_threshold"]))
-        consensus_latency = (
-            float(self.cfg["c0"])
-            + float(self.cfg["c1"]) * rtt
-            + float(self.cfg["c2"]) * committee_size * max(committee_size - 1, 0) * float(self.cfg["l_ctrl"]) / max(float(self.cfg["b_ctrl"]), 1.0)
-            + float(self.cfg["c3"]) * churn * committee_size
-            + float(self.cfg["c4"]) * leader_unstable
+        mu_eff = (
+            float(self.cfg["mu0"])
+            * np.exp(-float(self.cfg["a_r"]) * float(rtt) - float(self.cfg["a_chi"]) * float(churn))
+            * np.exp(-float(self.cfg["a_m"]) * pair_term)
+            * (1.0 / (1.0 + float(self.cfg["a_b"]) * effective_batch / max(float(self.cfg["B_ref"]), 1.0)))
+            * structural_feasible
         )
-        honest_ratio = 1.0
-        if committee_size > 0:
-            honest_ratio = float(np.mean(1 - malicious[committee]))
-        unsafe = int(honest_ratio < self.h_min)
-        tau_view = max(float(self.cfg["min_view_timeout"]), float(tau_ms) * float(self.cfg["tau_view_factor"]))
-        success = int((honest_ratio >= self.h_min) and (consensus_latency <= tau_view))
-        timeout_failure = int((honest_ratio >= self.h_min) and (consensus_latency > tau_view))
-        service_capacity = float(success * staged)
-        queue_next = max(0.0, queue_size + arrivals - service_capacity)
-        total_latency = queue_latency + batch_latency + consensus_latency + (1 - success) * float(self.cfg["l_pen"])
-        tps = service_capacity / max(total_latency / 1000.0, 1.0e-6)
+        served = min(effective_batch, mu_eff)
+        queue_next = max(0.0, x_total - served)
+        arrival_rate_per_ms = self.arrival_hat / max(delta_t_ms, eps)
+        wait_to_fill = min(float(tau_ms), max(0.0, (float(batch_size) - x_total) / max(arrival_rate_per_ms, eps))) if x_total < float(batch_size) else 0.0
+        queue_latency = queue_next / max(mu_eff, eps) if structural_feasible else 0.0
+        batch_latency = wait_to_fill / 2.0
+        consensus_latency = float(rtt) * (
+            float(self.cfg["c0"]) + float(self.cfg["c1"]) * float(committee_size) + float(self.cfg["c2"]) * pair_term
+        ) + float(self.cfg["c3"]) * effective_batch / max(float(self.cfg["B_ref"]), 1.0)
+        total_latency = queue_latency + batch_latency + consensus_latency
+
+        committee_mean_trust = float(np.mean(committee_trust_scores)) if committee_trust_scores.size > 0 else 0.0
+        h_warn = float(self.cfg.get("h_warn", self.h_min + 0.10))
+        unsafe = int(structural_feasible and committee_mean_trust < self.h_min)
+        timeout_failure = int(structural_feasible and consensus_latency > float(tau_ms))
+        margin_cost = (
+            float(np.clip((h_warn - committee_mean_trust) / max(h_warn - self.h_min, eps), 0.0, 1.0))
+            if committee_size > 0
+            else 1.0
+        )
+        success = int(structural_feasible and not unsafe and not timeout_failure)
+        block_slack = max(float(batch_size) - served, 0.0) / max(float(batch_size), 1.0)
+        tps = float(served) / max(total_latency / 1000.0, eps) if total_latency > 0.0 else 0.0
+        h_lcb = committee_mean_trust
         return ChainStepResult(
-            queue_next=queue_next,
-            service_capacity=service_capacity,
-            queue_latency=queue_latency,
-            batch_latency=batch_latency,
-            consensus_latency=consensus_latency,
-            total_latency=total_latency,
-            honest_ratio=honest_ratio,
-            unsafe=unsafe,
-            success=success,
-            leader_unstable=leader_unstable,
-            timeout_failure=timeout_failure,
-            tps=tps,
+            queue_next=float(queue_next),
+            service_capacity=float(served),
+            arrival_hat=float(self.arrival_hat),
+            wait_to_fill=float(wait_to_fill),
+            effective_batch=float(effective_batch),
+            mu_eff=float(mu_eff),
+            queue_latency=float(queue_latency),
+            batch_latency=float(batch_latency),
+            consensus_latency=float(consensus_latency),
+            total_latency=float(total_latency),
+            committee_mean_trust=float(committee_mean_trust),
+            unsafe=int(unsafe),
+            timeout_failure=int(timeout_failure),
+            success=int(success),
+            margin_cost=float(margin_cost),
+            block_slack=float(block_slack),
+            tps=float(tps),
+            h_lcb=float(h_lcb),
         )

@@ -1,7 +1,0 @@
-# 审计用最小评估配置：用于快速验证评估/benchmark 入口。
-run_name: audit_eval
-env:
-  episode_length: 40
-eval:
-  episodes: 2
-  deterministic: true

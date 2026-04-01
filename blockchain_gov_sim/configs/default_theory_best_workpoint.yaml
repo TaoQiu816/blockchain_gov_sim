@@ -1,0 +1,13 @@
+output_root: outputs/theory_best_workpoint
+run_name: theory_best_workpoint
+
+env:
+  h_min: 0.64
+  h_warn: 0.72
+  cost_weights:
+    timeout: 0.08
+    margin: 0.15
+
+chain:
+  lambda_h: 0.25
+  h_warn: 0.72

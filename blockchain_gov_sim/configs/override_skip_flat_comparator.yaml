@@ -1,0 +1,3 @@
+hierarchical:
+  compare:
+    skip_flat_comparator: true

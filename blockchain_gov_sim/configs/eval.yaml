@@ -1,7 +1,0 @@
-# 评估配置覆盖：可用于只改 episode 数和默认场景。
-run_name: eval_run
-eval:
-  episodes: 10
-  deterministic: true
-scenario:
-  default_name: stable

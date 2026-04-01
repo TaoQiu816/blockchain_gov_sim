@@ -1,0 +1,4 @@
+template,count,ratio,scenario
+7|0.55,1200,0.8333333333333334,load_shock
+7|0.45,216,0.15,load_shock
+5|0.50,24,0.016666666666666666,load_shock

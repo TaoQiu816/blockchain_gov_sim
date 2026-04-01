@@ -12,7 +12,9 @@ venv/
 # Experiment outputs
 outputs/
 !blockchain_gov_sim/outputs/
-!blockchain_gov_sim/outputs/**
+blockchain_gov_sim/outputs/*
+!blockchain_gov_sim/outputs/formal/
+!blockchain_gov_sim/outputs/formal/**
 !blockchain_gov_sim/results/
 !blockchain_gov_sim/results/**
 

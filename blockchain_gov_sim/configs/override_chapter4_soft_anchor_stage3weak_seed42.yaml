@@ -1,0 +1,23 @@
+output_root: outputs/chapter4_soft_anchor_stage3weak
+run_name: chapter4_soft_anchor_stage3weak_seed42
+
+hierarchical:
+  stage15:
+    soft_target_tau_reward: 10.0
+    soft_target_tau_cost: 0.005
+  stage2:
+    total_base_timesteps: 48000
+    oracle_anchor:
+      enabled: true
+      beta_init: 0.5
+      beta_final: 0.0
+      decay_fraction: 0.5
+      batch_size: 64
+  stage3:
+    high_base_timesteps_per_round: 6000
+    oracle_anchor:
+      enabled: true
+      beta_init: 0.1
+      beta_final: 0.0
+      decay_fraction: 0.5
+      batch_size: 64

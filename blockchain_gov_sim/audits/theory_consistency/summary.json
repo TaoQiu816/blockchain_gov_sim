@@ -1,0 +1,13 @@
+{
+  "config": "configs/default.yaml",
+  "seeds": 2,
+  "episodes": 4,
+  "artifacts": {
+    "m_scan": "audits/theory_consistency/m_scan_churn_burst.csv",
+    "theta_grid": "audits/theory_consistency/m_theta_grid_malicious_burst.csv",
+    "b_scan_stable": "audits/theory_consistency/b_scan_stable.csv",
+    "b_scan_load_shock": "audits/theory_consistency/b_scan_load_shock.csv",
+    "tau_scan_stable": "audits/theory_consistency/tau_scan_stable.csv",
+    "tau_scan_high_rtt_burst": "audits/theory_consistency/tau_scan_high_rtt_burst.csv"
+  }
+}

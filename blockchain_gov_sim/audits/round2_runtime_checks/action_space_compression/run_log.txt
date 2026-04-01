@@ -1,0 +1,34 @@
+
+=== 审计场景: load_shock ===
+Traceback (most recent call last):
+  File "/Users/qiutao/研/毕设/毕设/blockchainSim/blockchain_gov_sim/audits/round2_runtime_checks/action_space_compression/audit_action_space_legality.py", line 150, in <module>
+    main()
+    ~~~~^^
+  File "/Users/qiutao/研/毕设/毕设/blockchainSim/blockchain_gov_sim/audits/round2_runtime_checks/action_space_compression/audit_action_space_legality.py", line 123, in main
+    df, total_steps = run_legality_audit(config_path, scenario, episodes, seed)
+                      ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/qiutao/研/毕设/毕设/blockchainSim/blockchain_gov_sim/audits/round2_runtime_checks/action_space_compression/audit_action_space_legality.py", line 67, in run_legality_audit
+    obs, info = env.reset(seed=seed + ep)
+                ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/Users/qiutao/研/毕设/毕设/blockchainSim/blockchain_gov_sim/gov_sim/env/gov_env.py", line 457, in reset
+    self._prepare_epoch()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/qiutao/研/毕设/毕设/blockchainSim/blockchain_gov_sim/gov_sim/env/gov_env.py", line 302, in _prepare_epoch
+    self.current_scenario = self.scenario.step(
+                            ~~~~~~~~~~~~~~~~~~^
+        epoch=self.epoch,
+        ^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        eligible_size=base_eligible,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/qiutao/研/毕设/毕设/blockchainSim/blockchain_gov_sim/gov_sim/modules/scenario_model.py", line 256, in step
+    arrivals = self._sample_arrivals(epoch)
+  File "/Users/qiutao/研/毕设/毕设/blockchainSim/blockchain_gov_sim/gov_sim/modules/scenario_model.py", line 187, in _sample_arrivals
+    return self._sample_default_arrivals(epoch)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/qiutao/研/毕设/毕设/blockchainSim/blockchain_gov_sim/gov_sim/modules/scenario_model.py", line 155, in _sample_default_arrivals
+    scenario_cfg = self.config[self.default_name]
+                   ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+KeyError: 'load_shock'

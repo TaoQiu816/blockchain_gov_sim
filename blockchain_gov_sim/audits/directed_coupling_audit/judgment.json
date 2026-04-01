@@ -1,0 +1,176 @@
+{
+  "timestamp": "2026-03-19T03:58:17.005053",
+  "audits": {
+    "b_scan": {
+      "queue_size_trend": {
+        "correlation": -0.9999999817247404,
+        "is_monotonic": true,
+        "x_values": [
+          256,
+          320,
+          384,
+          448,
+          512
+        ],
+        "y_means": [
+          7055.000833333333,
+          6039.409722222223,
+          5024.920833333334,
+          4009.880833333333,
+          2995.480833333333
+        ]
+      },
+      "tps_trend": {
+        "correlation": 0.999920217447833,
+        "is_monotonic": true,
+        "x_values": [
+          256,
+          320,
+          384,
+          448,
+          512
+        ],
+        "y_means": [
+          10049.438215992317,
+          11520.405112137823,
+          13040.865126411009,
+          14587.297635007082,
+          16158.458538933375
+        ]
+      },
+      "latency_trend": {
+        "correlation": -0.9301182530942234,
+        "is_monotonic": true,
+        "x_values": [
+          256,
+          320,
+          384,
+          448,
+          512
+        ],
+        "y_means": [
+          23.508587552595852,
+          23.143820174592154,
+          22.93882240744237,
+          22.847177398908837,
+          22.814685263060486
+        ]
+      },
+      "pass": true,
+      "reason": "b增加应降低队列、提高吞吐",
+      "allow_model_change": false
+    },
+    "tau_scan": {
+      "timeout_rate_trend": {
+        "correlation": -0.7745966692414834,
+        "is_monotonic": true,
+        "x_values": [
+          40,
+          60,
+          80,
+          100
+        ],
+        "y_means": [
+          0.0036111111111111105,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "latency_trend": {
+        "correlation": -0.948479448818542,
+        "is_monotonic": true,
+        "x_values": [
+          40,
+          60,
+          80,
+          100
+        ],
+        "y_means": [
+          27.44885187019841,
+          27.01551401771391,
+          27.01551401771391,
+          26.606864924473555
+        ]
+      },
+      "pass": true,
+      "reason": "tau增加应降低超时率",
+      "allow_model_change": false
+    },
+    "theta_scan": {
+      "unsafe_rate_trend": {
+        "correlation": 0.5362592325517961,
+        "is_monotonic": false,
+        "x_values": [
+          0.45,
+          0.5,
+          0.55,
+          0.6
+        ],
+        "y_means": [
+          0.0033333333333333327,
+          0.0013888888888888885,
+          0.0022222222222222222,
+          0.005555555555555556
+        ]
+      },
+      "committee_size_trend": {
+        "correlation": -0.9289032103399515,
+        "is_monotonic": true,
+        "x_values": [
+          0.45,
+          0.5,
+          0.55,
+          0.6
+        ],
+        "y_means": [
+          6.939722222222223,
+          6.8825,
+          6.706666666666666,
+          6.260833333333333
+        ]
+      },
+      "pass": false,
+      "reason": "未观察到theta的预期效果，可能需要检查安全机制",
+      "allow_model_change": true
+    },
+    "m_scan": {
+      "committee_size_trend": {
+        "correlation": 0.9887647622939731,
+        "is_monotonic": true,
+        "x_values": [
+          5,
+          7,
+          9
+        ],
+        "y_means": [
+          3.6336111111111102,
+          4.676388888888888,
+          5.286388888888889
+        ]
+      },
+      "structural_infeasible_trend": {
+        "correlation": 0.9271455408231212,
+        "is_monotonic": true,
+        "x_values": [
+          5,
+          7,
+          9
+        ],
+        "y_means": [
+          0.38000000000000006,
+          0.38472222222222224,
+          0.3855555555555556
+        ]
+      },
+      "pass": true,
+      "reason": "m应直接决定委员会大小",
+      "allow_model_change": false
+    }
+  },
+  "overall": {
+    "all_pass": false,
+    "allow_any_model_change": true,
+    "conclusion": "部分耦合关系未验证通过，建议检查对应机制或允许模型调整"
+  }
+}

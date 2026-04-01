@@ -56,6 +56,16 @@ def _maybe_tensorboard_log(path: str | None) -> str | None:
     return path if importlib.util.find_spec("tensorboard") is not None else None
 
 
+def with_training_mix(config: dict[str, Any], enabled: bool) -> dict[str, Any]:
+    """显式切换训练混合场景开关，避免训练和评估相互污染。"""
+
+    updated = deepcopy(config)
+    scenario_cfg = updated.setdefault("scenario", {})
+    training_mix_cfg = scenario_cfg.setdefault("training_mix", {})
+    training_mix_cfg["enabled"] = bool(enabled)
+    return updated
+
+
 def make_env(config: dict[str, Any]) -> BlockchainGovEnv:
     """创建一个独立环境实例。"""
     return BlockchainGovEnv(config=deepcopy(config))
@@ -159,7 +169,9 @@ def evaluate_controller(
     - summary：便于 benchmark / eval 汇总。
     """
 
-    env = make_env(config)
+    env = make_env(with_training_mix(config, enabled=False))
+    if is_baseline and hasattr(env, "set_invalid_action_mode"):
+        env.set_invalid_action_mode("terminate")
     tracker = MetricsTracker()
     rows: list[dict[str, Any]] = []
     for episode in range(episodes):

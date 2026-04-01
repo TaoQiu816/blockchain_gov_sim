@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Generator
 
 import gymnasium as gym
@@ -36,7 +37,6 @@ except ImportError as exc:  # pragma: no cover - 只有未安装 RL 依赖时触
     ) from exc
 
 from gov_sim.agent.policy_wrappers import CostValueNet
-from gov_sim.constants import ACTION_DIM
 from gov_sim.utils.math_utils import RunningMeanStd
 
 # 在极稀疏 action mask + 极小 softmax 概率下，PyTorch 对 categorical simplex 的严格校验
@@ -78,6 +78,7 @@ class ConstrainedDictRolloutBuffer:
         self.device = device
         self.gamma = gamma
         self.gae_lambda = gae_lambda
+        self.action_dim = int(action_space.n)
         self.reset()
 
     def reset(self) -> None:
@@ -92,6 +93,7 @@ class ConstrainedDictRolloutBuffer:
         self.rewards = np.zeros(self.buffer_size, dtype=np.float32)
         self.costs = np.zeros(self.buffer_size, dtype=np.float32)
         self.raw_costs = np.zeros(self.buffer_size, dtype=np.float32)
+        self.constraint_costs = np.zeros(self.buffer_size, dtype=np.float32)
         self.episode_starts = np.zeros(self.buffer_size, dtype=np.float32)
         self.values = np.zeros(self.buffer_size, dtype=np.float32)
         self.cost_values = np.zeros(self.buffer_size, dtype=np.float32)
@@ -100,7 +102,7 @@ class ConstrainedDictRolloutBuffer:
         self.cost_advantages = np.zeros(self.buffer_size, dtype=np.float32)
         self.returns = np.zeros(self.buffer_size, dtype=np.float32)
         self.cost_returns = np.zeros(self.buffer_size, dtype=np.float32)
-        self.action_masks = np.zeros((self.buffer_size, ACTION_DIM), dtype=np.float32)
+        self.action_masks = np.zeros((self.buffer_size, self.action_dim), dtype=np.float32)
 
     def add(
         self,
@@ -109,6 +111,7 @@ class ConstrainedDictRolloutBuffer:
         reward: float,
         cost: float,
         raw_cost: float,
+        constraint_cost: float,
         episode_start: bool,
         value: torch.Tensor,
         cost_value: torch.Tensor,
@@ -117,9 +120,10 @@ class ConstrainedDictRolloutBuffer:
     ) -> None:
         """写入一步 transition。
 
-        注意这里既存 reward，也存 raw cost 和标准化后的 cost：
-        - actor / cost critic 用标准化版本，训练更稳定；
-        - lambda 更新使用 raw cost，保证约束含义不被缩放破坏。
+        注意这里同时缓存三种 cost 口径：
+        - `costs`: 给 actor / cost critic / GAE 使用；
+        - `raw_costs`: 记录环境返回的折扣 chunk cost，便于审计；
+        - `constraint_costs`: 给 lambda update 使用，保持与 cost_limit 同尺度。
         """
 
         if self.pos >= self.buffer_size:
@@ -130,6 +134,7 @@ class ConstrainedDictRolloutBuffer:
         self.rewards[self.pos] = float(reward)
         self.costs[self.pos] = float(cost)
         self.raw_costs[self.pos] = float(raw_cost)
+        self.constraint_costs[self.pos] = float(constraint_cost)
         self.episode_starts[self.pos] = float(episode_start)
         self.values[self.pos] = float(value.detach().cpu().numpy().reshape(-1)[0])
         self.cost_values[self.pos] = float(cost_value.detach().cpu().numpy().reshape(-1)[0])
@@ -212,6 +217,10 @@ class MaskablePPOLagrangian(MaskablePPO):
         lambda_max: float = 10.0,
         reward_normalization: bool = False,
         cost_normalization: bool = False,
+        oracle_anchor_beta_init: float = 0.0,
+        oracle_anchor_beta_final: float = 0.0,
+        oracle_anchor_decay_fraction: float = 0.0,
+        oracle_anchor_batch_size: int | None = None,
         **kwargs: Any,
     ) -> None:
         """初始化约束优化相关超参数。"""
@@ -222,9 +231,88 @@ class MaskablePPOLagrangian(MaskablePPO):
         self.lambda_max = lambda_max
         self.reward_normalization = reward_normalization
         self.cost_normalization = cost_normalization
+        self.oracle_anchor_beta_init = float(oracle_anchor_beta_init)
+        self.oracle_anchor_beta_final = float(oracle_anchor_beta_final)
+        self.oracle_anchor_decay_fraction = float(oracle_anchor_decay_fraction)
+        self.oracle_anchor_batch_size = None if oracle_anchor_batch_size is None else int(oracle_anchor_batch_size)
+        self._oracle_anchor_states: torch.Tensor | None = None
+        self._oracle_anchor_masks: torch.Tensor | None = None
+        self._oracle_anchor_targets: torch.Tensor | None = None
         self.reward_rms = RunningMeanStd()
         self.cost_rms = RunningMeanStd()
         super().__init__(*args, **kwargs)
+
+    def set_oracle_anchor_schedule(
+        self,
+        *,
+        beta_init: float,
+        beta_final: float = 0.0,
+        decay_fraction: float = 0.5,
+        batch_size: int | None = None,
+    ) -> None:
+        self.oracle_anchor_beta_init = float(beta_init)
+        self.oracle_anchor_beta_final = float(beta_final)
+        self.oracle_anchor_decay_fraction = float(max(decay_fraction, 0.0))
+        self.oracle_anchor_batch_size = None if batch_size is None else int(batch_size)
+
+    def load_oracle_anchor_dataset(self, dataset_path: str | Path) -> None:
+        data = np.load(Path(dataset_path), allow_pickle=False)
+        if "states" not in data or "action_masks" not in data or "soft_targets" not in data:
+            raise KeyError("Oracle anchor dataset must contain states, action_masks, and soft_targets.")
+        self._oracle_anchor_states = torch.as_tensor(data["states"], dtype=torch.float32, device=self.device)
+        self._oracle_anchor_masks = torch.as_tensor(data["action_masks"], dtype=torch.float32, device=self.device)
+        self._oracle_anchor_targets = torch.as_tensor(data["soft_targets"], dtype=torch.float32, device=self.device)
+
+    def clear_oracle_anchor(self) -> None:
+        self._oracle_anchor_states = None
+        self._oracle_anchor_masks = None
+        self._oracle_anchor_targets = None
+        self.oracle_anchor_beta_init = 0.0
+        self.oracle_anchor_beta_final = 0.0
+        self.oracle_anchor_decay_fraction = 0.0
+
+    def _current_oracle_anchor_beta(self) -> float:
+        if (
+            self._oracle_anchor_states is None
+            or self._oracle_anchor_masks is None
+            or self._oracle_anchor_targets is None
+            or self.oracle_anchor_beta_init <= 0.0
+            or self.oracle_anchor_decay_fraction <= 0.0
+        ):
+            return 0.0
+        progress = float(1.0 - self._current_progress_remaining)
+        if progress >= self.oracle_anchor_decay_fraction:
+            return max(0.0, float(self.oracle_anchor_beta_final))
+        ratio = progress / max(self.oracle_anchor_decay_fraction, 1.0e-8)
+        beta = self.oracle_anchor_beta_init + ratio * (self.oracle_anchor_beta_final - self.oracle_anchor_beta_init)
+        return max(0.0, float(beta))
+
+    def _oracle_anchor_kl(self, batch_size: int) -> torch.Tensor:
+        if (
+            self._oracle_anchor_states is None
+            or self._oracle_anchor_masks is None
+            or self._oracle_anchor_targets is None
+            or self._oracle_anchor_states.shape[0] == 0
+        ):
+            return torch.zeros((), device=self.device)
+        effective_batch_size = int(self.oracle_anchor_batch_size or batch_size)
+        indices = torch.randint(
+            low=0,
+            high=int(self._oracle_anchor_states.shape[0]),
+            size=(max(effective_batch_size, 1),),
+            device=self.device,
+        )
+        states = self._oracle_anchor_states.index_select(0, indices)
+        masks = self._oracle_anchor_masks.index_select(0, indices)
+        targets = self._oracle_anchor_targets.index_select(0, indices)
+        distribution = self.policy.get_distribution(
+            {"state": states, "action_mask": masks},
+            action_masks=masks.bool(),
+        )
+        probs = torch.clamp(distribution.distribution.probs, min=1.0e-8)
+        log_probs = torch.log(probs)
+        target_log_probs = torch.log(torch.clamp(targets, min=1.0e-8))
+        return torch.sum(targets * (target_log_probs - log_probs), dim=1).mean()
 
     def _setup_model(self) -> None:
         """在 SB3 模型搭建完成后追加 cost critic 与自定义 buffer。"""
@@ -276,7 +364,9 @@ class MaskablePPOLagrangian(MaskablePPO):
             with torch.no_grad():
                 obs_tensor = obs_as_tensor(self._last_obs, self.device)
                 action_masks = (
-                    self._last_obs["action_mask"].astype(bool) if use_masking else np.ones_like(self._last_obs["action_mask"], dtype=bool)
+                    self._last_obs["action_mask"].astype(bool)
+                    if use_masking
+                    else np.ones_like(self._last_obs["action_mask"], dtype=bool)
                 )
                 actions, values, log_probs = self.policy(obs_tensor, action_masks=action_masks)
                 # 独立的 cost critic 只看连续状态，不消费 action mask。
@@ -284,6 +374,10 @@ class MaskablePPOLagrangian(MaskablePPO):
             actions_np = actions.cpu().numpy()
             new_obs, rewards, dones, infos = env.step(actions_np)
             costs = np.asarray([info.get("cost", 0.0) for info in infos], dtype=np.float32)
+            constraint_costs = np.asarray(
+                [info.get("high_chunk_normalized_cost", info.get("cost", 0.0)) for info in infos],
+                dtype=np.float32,
+            )
             self._update_info_buffer(infos, dones)
             reward_batch = rewards.astype(np.float32)
             cost_batch = costs.astype(np.float32)
@@ -299,6 +393,7 @@ class MaskablePPOLagrangian(MaskablePPO):
                 reward=float(reward_batch[0]),
                 cost=float(cost_batch[0]),
                 raw_cost=float(costs[0]),
+                constraint_cost=float(constraint_costs[0]),
                 episode_start=bool(self._last_episode_starts[0]),
                 value=values.flatten(),
                 cost_value=cost_values.flatten(),
@@ -338,6 +433,8 @@ class MaskablePPOLagrangian(MaskablePPO):
         value_losses: list[float] = []
         cost_value_losses: list[float] = []
         clip_fractions: list[float] = []
+        oracle_anchor_kls: list[float] = []
+        oracle_anchor_betas: list[float] = []
 
         for _ in range(self.n_epochs):
             for rollout_data in self.rollout_buffer.get(self.batch_size):
@@ -360,9 +457,18 @@ class MaskablePPOLagrangian(MaskablePPO):
                 policy_loss = -torch.min(policy_loss_1, policy_loss_2).mean()
                 value_loss = F.mse_loss(rollout_data.returns, values)
                 entropy_loss = -torch.mean(entropy if entropy is not None else -log_prob)
+                oracle_anchor_beta = self._current_oracle_anchor_beta()
+                oracle_anchor_kl = torch.zeros((), device=self.device)
+                if oracle_anchor_beta > 0.0:
+                    oracle_anchor_kl = self._oracle_anchor_kl(batch_size=int(rollout_data.actions.shape[0]))
 
                 self.policy.optimizer.zero_grad()
-                total_policy_loss = policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
+                total_policy_loss = (
+                    policy_loss
+                    + self.ent_coef * entropy_loss
+                    + self.vf_coef * value_loss
+                    + float(oracle_anchor_beta) * oracle_anchor_kl
+                )
                 total_policy_loss.backward()
                 nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
                 self.policy.optimizer.step()
@@ -381,12 +487,20 @@ class MaskablePPOLagrangian(MaskablePPO):
                 value_losses.append(float(value_loss.item()))
                 cost_value_losses.append(float(cost_value_loss.item()))
                 clip_fractions.append(float(clip_fraction))
+                oracle_anchor_kls.append(float(oracle_anchor_kl.item()))
+                oracle_anchor_betas.append(float(oracle_anchor_beta))
                 if self.target_kl is not None and approx_kl > 1.5 * self.target_kl:
                     break
 
-        # 拉格朗日乘子更新使用原始 cost，而不是归一化后的 cost，保证约束上界有明确物理含义。
         mean_raw_cost = float(np.mean(self.rollout_buffer.raw_costs))
-        self.lambda_value = float(np.clip(self.lambda_value + self.lagrangian_lr * (mean_raw_cost - self.cost_limit), 0.0, self.lambda_max))
+        mean_constraint_cost = float(np.mean(self.rollout_buffer.constraint_costs))
+        self.lambda_value = float(
+            np.clip(
+                self.lambda_value + self.lagrangian_lr * (mean_constraint_cost - self.cost_limit),
+                0.0,
+                self.lambda_max,
+            )
+        )
         explained_var = explained_variance(self.rollout_buffer.values, self.rollout_buffer.returns)
         cost_explained_var = explained_variance(self.rollout_buffer.cost_values, self.rollout_buffer.cost_returns)
 
@@ -398,8 +512,13 @@ class MaskablePPOLagrangian(MaskablePPO):
         self.logger.record("train/explained_variance", explained_var)
         self.logger.record("train/cost_explained_variance", cost_explained_var)
         self.logger.record("train/lagrangian_lambda", self.lambda_value)
-        self.logger.record("train/mean_rollout_cost", mean_raw_cost)
-        self.logger.record("train/constraint_violation", max(0.0, mean_raw_cost - self.cost_limit))
+        if oracle_anchor_betas:
+            self.logger.record("train/oracle_anchor_beta", float(np.mean(oracle_anchor_betas)))
+            self.logger.record("train/oracle_anchor_kl", float(np.mean(oracle_anchor_kls)))
+        self.logger.record("train/mean_rollout_cost", mean_constraint_cost)
+        self.logger.record("train/mean_rollout_discounted_cost", mean_raw_cost)
+        self.logger.record("train/mean_rollout_normalized_cost", mean_constraint_cost)
+        self.logger.record("train/constraint_violation", max(0.0, mean_constraint_cost - self.cost_limit))
 
     def learn(
         self,

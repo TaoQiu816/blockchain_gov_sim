@@ -1,0 +1,4 @@
+template,count,ratio,scenario
+7|0.55,1069,0.816030534351145,malicious_burst
+7|0.45,152,0.11603053435114503,malicious_burst
+5|0.50,87,0.06641221374045801,malicious_burst

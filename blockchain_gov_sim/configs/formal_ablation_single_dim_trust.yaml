@@ -1,0 +1,3 @@
+reputation:
+  fusion_dims: [svc]
+  use_penalties: false

@@ -11,7 +11,7 @@ env:
   # RSU 全节点数量。
   num_rsus: 27
   # 恶意 RSU 比例。
-  malicious_ratio: 0.32
+  malicious_ratio: 0.05
   # 资格集的最小稳定性门槛。
   u_min: 0.58
   # 安全判定所需最小诚实比例。
@@ -23,8 +23,6 @@ env:
   delta_theta_max: 0.2
   # 在 no_action_mask 消融中，非法动作只靠 reward penalty 处理。
   invalid_action_penalty: 6.0
-  # 是否启用基于当前资格集与信誉质量的安全先验屏蔽。
-  unsafe_action_guard: true
   # 主方案为 true；no_action_mask 消融会关掉它。
   mask_illegal_actions: true
   # 主方案默认使用软抽签；Top-K 由部分 baseline / ablation 显式覆盖。
@@ -32,48 +30,63 @@ env:
   soft_sortition_beta: 6.0
   # 信誉分布直方图摘要的分箱数。
   observation_hist_bins: 5
+  # 观测侧压力特征 EMA 平滑系数。
+  observation_ema: 0.8
   reward_weights:
     throughput: 1.6
     latency: 0.08
     queue: 0.025
     smooth: 0.12
+    block_slack: 0.12
   cost_weights:
-    honest_penalty: 0.4
+    timeout: 0.12
+    margin: 0.15
+  h_warn: 0.78
+  unsafe_guard_slack: 0.9
   reward_normalization: true
   cost_normalization: true
 
 reputation:
   # Beta 先验。
-  prior_alpha: 1.0
-  prior_beta: 1.0
+  prior_alpha: 7.0
+  prior_beta: 2.0
   # 各维折扣系数 rho_d。
   rho:
     svc: 0.95
     con: 0.96
     rec: 0.94
     stab: 0.97
+  lambda_dim:
+    svc: 0.45
+    con: 0.35
+    rec: 0.40
+    stab: 0.30
   # 冷启动门控超参数 N0。
-  n0: 8.0
+  n0: 4.0
   eps: 1.0e-6
-  # 上下文感知门控向量 eta_d，对应 c=[A,Q,L_bar,RTT,chi,|E|]。
+  # 上下文感知门控向量 eta_d，对应
+  # c=[arrival,queue,dqueue,rtt,drtt,churn,eligible_prev,honest_lcb_prev,unsafe_prev,timeout_prev]。
   context_eta:
-    svc: [0.12, -0.08, -0.10, -0.06, -0.04, 0.04]
-    con: [-0.03, 0.08, -0.05, -0.08, -0.03, 0.10]
-    rec: [0.02, 0.03, -0.04, -0.02, 0.01, 0.06]
-    stab: [-0.04, -0.03, -0.03, -0.05, -0.12, -0.02]
+    svc: [0.10, -0.08, -0.06, -0.04, -0.03, -0.02, 0.03, 0.02, -0.02, -0.02]
+    con: [-0.02, 0.03, -0.02, -0.10, -0.08, -0.02, 0.08, 0.12, -0.06, -0.08]
+    rec: [0.02, 0.02, -0.01, -0.02, -0.01, 0.01, 0.05, 0.04, -0.03, -0.03]
+    stab: [-0.04, -0.02, -0.03, -0.04, -0.05, -0.12, 0.02, 0.06, -0.04, -0.04]
   penalty:
-    # 跨维一致性阈值。
-    delta_cs: 0.1
-    delta_rs: 0.1
     # on-off / zigzag 惩罚参数。
     onoff_eta: 0.85
     v0: 0.07
     mu0: 0.45
+    z0: 0.06
     # 推荐相似度阈值与稳定性阈值。
     rho0: 0.85
     u0: 0.75
     # 各惩罚项系数。
-    gamma_sc: 0.35
+    gamma_onoff: 0.30
+    gamma_zigzag: 0.22
+    gamma_rec_bias: 0.25
+    gamma_collusion: 0.22
+    gamma_stability: 0.18
+    # legacy aliases kept for compatibility with historical summaries
     gamma_on: 0.30
     gamma_rec: 0.25
     gamma_col: 0.22
@@ -84,28 +97,61 @@ reputation:
   use_penalties: true
 
 chain:
-  # 链侧时延模型参数。
-  cq: 0.08
-  c0: 4.0
-  c1: 0.30
-  c2: 0.015
-  c3: 10.0
-  c4: 4.0
-  l_ctrl: 2.0
-  b_ctrl: 50.0
+  # 链侧服务/时延/安全模型参数。
+  mu0: 220.0
+  a_r: 0.008
+  a_chi: 1.20
+  a_m: 0.012
+  a_b: 0.04
+  B_ref: 320.0
+  delta_t_ms: 100.0
+  c0: 0.50
+  c1: 0.45
+  c2: 0.03
+  c3: 8.0
   l_pen: 120.0
   tau_view_factor: 1.3
   min_view_timeout: 30.0
+  lambda_h: 0.35
+  h_warn: 0.78
   # EWMA 到达率估计与 leader 不稳定阈值。
-  lambda_ewma: 0.9
-  leader_instability_threshold: 0.7
+  lambda_ewma: 0.8
+  initial_arrival_hat: 260.0
 
 scenario:
   # 默认场景名，可切换为 stable / step / mmpp。
   default_name: stable
+  training_mix:
+    enabled: false
+    enabled_in_train: true
+    profiles:
+      steady:
+        weight: 0.30
+      load_shock:
+        weight: 0.25
+        low_lambda_scale: 0.72
+        high_lambda_scale: 2.5
+        burst_start_frac: 0.45
+      high_rtt_burst:
+        weight: 0.15
+        burst_start_frac: 0.40
+        burst_end_frac: 0.75
+        rtt_min: 50.0
+        rtt_max: 100.0
+      churn_burst:
+        weight: 0.15
+        burst_start_frac: 0.40
+        burst_end_frac: 0.75
+        p_off: 0.22
+        p_on: 0.08
+      malicious_burst:
+        weight: 0.15
+        burst_start_frac: 0.45
+        burst_end_frac: 0.85
+        extra_malicious_ratio: 0.15
   stable:
     type: stable
-    lambda: 260
+    lambda: 160
   step:
     type: step
     lambda: 230
@@ -120,22 +166,28 @@ scenario:
     initial_state: 0
   network:
     # RTT 与 online/offline 马尔可夫链参数。
-    rtt_min: 14.0
-    rtt_max: 42.0
-    p_off: 0.08
-    p_on: 0.22
+    rtt_min: 15.0
+    rtt_max: 25.0
+    p_off: 0.01
+    p_on: 0.45
+  evidence:
+    # normal 场景使用近解析、低噪声证据，以避免 LRD 对微小抖动过度放大。
+    success_noise_std: 0.0
+    endorse_noise_std: 0.0
+    timeout_noise_std: 0.0
+    detect_noise_std: 0.0
   honest_base:
     # 诚实节点四维基础成功概率 p0_d。
-    svc: 0.95
-    con: 0.97
-    rec: 0.92
-    stab: 0.96
+    svc: 0.980
+    con: 0.988
+    rec: 0.970
+    stab: 0.980
   degradation:
     # p^H_d = clip(p0_d - a_d*load - b_d*RTT_norm - c_d*chi, 0, 1)
-    svc: [0.24, 0.08, 0.12]
-    con: [0.16, 0.05, 0.20]
-    rec: [0.10, 0.04, 0.08]
-    stab: [0.07, 0.03, 0.35]
+    svc: [0.06, 0.018, 0.03]
+    con: [0.045, 0.015, 0.045]
+    rec: [0.03, 0.010, 0.024]
+    stab: [0.016, 0.007, 0.05]
   # 每个周期、每个节点、每个维度的证据条数。
   evidence_per_node: 4
   attack:
@@ -168,7 +220,7 @@ agent:
   max_grad_norm: 0.5
   total_timesteps: 4000
   lagrangian_lr: 0.02
-  cost_limit: 0.18
+  cost_limit: 0.10
   lambda_init: 0.1
   lambda_max: 10.0
   # 是否对 reward/cost 做在线标准化。
@@ -190,7 +242,7 @@ eval:
 
 baselines:
   # 基础静态动作。
-  static_action: [11, 256, 40, 0.55]
+  static_action: [7, 384, 60, 0.50]
   # Top-K 类 baseline 的信誉分位阈值。
   topk_quantile: 0.65
   aimd:
@@ -205,11 +257,11 @@ baselines:
 study:
   # 固定结构参数：不作为默认工作点标定，而是模型定义本身。
   fixed_structure:
-    action_space_size: 400
-    committee_size_candidates: [7, 9, 11, 13, 15]
-    block_size_candidates: [128, 256, 384, 512]
-    batch_timeout_candidates_ms: [20, 40, 60, 80]
-    theta_candidates: [0.40, 0.50, 0.60, 0.70, 0.80]
+    action_space_size: 240
+    committee_size_candidates: [5, 7, 9]
+    block_size_candidates: [256, 320, 384, 448, 512]
+    batch_timeout_candidates_ms: [40, 60, 80, 100]
+    theta_candidates: [0.45, 0.50, 0.55, 0.60]
     reputation_dims: [svc, con, rec, stab]
   # 默认工作点：用于正式章节主结果。
   default_workpoint:

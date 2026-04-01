@@ -1,4 +1,0 @@
-# 第四章中等压力工作点 moderate。
-# 除恶意比例外，其余与 hard/default 保持一致。
-env:
-  malicious_ratio: 0.20

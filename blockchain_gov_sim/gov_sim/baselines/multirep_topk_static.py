@@ -17,4 +17,4 @@ class MultiRepTopKStaticBaseline(BaselineBase):
         self._set_committee_method(env, "topk")
         state = env.unwrapped.get_governance_state()
         theta = quantile_threshold(state["snapshot"].final_scores, float(self.config["baselines"]["topk_quantile"]))
-        return self._nearest_action(11, 256, 40, theta)
+        return self._nearest_action(9, 384, 60, theta)

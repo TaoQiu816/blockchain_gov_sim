@@ -1,0 +1,4 @@
+template,count,ratio,scenario
+7|0.55,539,0.8266871165644172,churn_burst
+7|0.45,69,0.1058282208588957,churn_burst
+5|0.50,32,0.049079754601226995,churn_burst

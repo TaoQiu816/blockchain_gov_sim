@@ -1,0 +1,13 @@
+output_root: outputs/theory_workpoint_calibration
+run_name: theory_workpoint_calibration_base
+
+env:
+  h_min: 0.68
+  h_warn: 0.78
+  cost_weights:
+    timeout: 0.12
+    margin: 0.15
+
+chain:
+  lambda_h: 0.35
+  h_warn: 0.78

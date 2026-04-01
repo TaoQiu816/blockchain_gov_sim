@@ -18,4 +18,4 @@ class SingleRepTopKStaticBaseline(BaselineBase):
         state = env.unwrapped.get_governance_state()
         svc_scores = state["snapshot"].mu["svc"]
         theta = quantile_threshold(svc_scores, float(self.config["baselines"]["topk_quantile"]))
-        return self._nearest_action(11, 256, 40, theta)
+        return self._nearest_action(9, 384, 60, theta)

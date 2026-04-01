@@ -8,7 +8,7 @@ from typing import Any
 import pandas as pd
 
 from gov_sim.agent.callbacks import TrainLoggingCallback
-from gov_sim.experiments import build_model, evaluate_controller, make_vec_env, prepare_output_dir
+from gov_sim.experiments import build_model, evaluate_controller, make_vec_env, prepare_output_dir, with_training_mix
 from gov_sim.utils.device import device_runtime_info
 from gov_sim.utils.io import write_json
 from gov_sim.utils.plotting import save_line_plot
@@ -18,8 +18,12 @@ from gov_sim.utils.train_artifacts import generate_train_artifacts
 def run_training(config: dict[str, Any]) -> dict[str, Any]:
     """执行训练并导出训练日志、后评估结果与曲线。"""
     output_dir = prepare_output_dir(config, "train")
-    env = make_vec_env(config)
-    model = build_model(config=config, env=env, use_lagrangian=True)
+    train_config = with_training_mix(
+        config,
+        enabled=bool(config.get("scenario", {}).get("training_mix", {}).get("enabled_in_train", False)),
+    )
+    env = make_vec_env(train_config)
+    model = build_model(config=train_config, env=env, use_lagrangian=True)
     callback = TrainLoggingCallback(log_path=output_dir / "train_log.csv", audit_path=output_dir / "train_audit.json")
     model.learn(total_timesteps=int(config["agent"]["total_timesteps"]), callback=callback, progress_bar=False)
     model.save(str(output_dir / "model"))
@@ -34,6 +38,7 @@ def run_training(config: dict[str, Any]) -> dict[str, Any]:
         is_baseline=False,
     )
     eval_df.to_csv(output_dir / "post_train_eval.csv", index=False)
+    write_json(output_dir / "post_train_eval_summary.json", eval_summary)
     summary = {
         "train_episodes": int(len(log_df)),
         "ep_reward_mean": float(log_df["episode_reward"].mean()) if not log_df.empty else 0.0,

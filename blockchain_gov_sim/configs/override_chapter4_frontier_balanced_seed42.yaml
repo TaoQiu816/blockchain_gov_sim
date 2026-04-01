@@ -1,0 +1,11 @@
+output_root: outputs/chapter4_frontier_balanced
+run_name: chapter4_frontier_balanced_seed42
+
+hierarchical:
+  stage1:
+    pretrained_model_path: outputs/chapter4_final_imitation_locked/hierarchical/chapter4_final_imitation_locked_seed42/stage1_low_pretrain/model.zip
+  stage15:
+    balancing:
+      enabled: true
+      strategy: scene_phase_template_uniform
+      seed: 42

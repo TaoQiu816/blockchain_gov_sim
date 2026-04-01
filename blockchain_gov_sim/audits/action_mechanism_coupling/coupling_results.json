@@ -1,0 +1,206 @@
+{
+  "high_level": {
+    "m_scan": [
+      {
+        "m": 5,
+        "action_idx": 37,
+        "eligible_size": 10.809166666666666,
+        "committee_size": 5.0,
+        "unsafe_rate": 0.0,
+        "latency": 19.625060298936454,
+        "queue_size": 0.0,
+        "timeout_rate": 0.0,
+        "tps": 13934.05036977943,
+        "structural_infeasible": 0.0
+      },
+      {
+        "m": 7,
+        "action_idx": 117,
+        "eligible_size": 10.838333333333333,
+        "committee_size": 6.956666666666668,
+        "unsafe_rate": 0.0,
+        "latency": 22.231430367061577,
+        "queue_size": 0.17916666666666667,
+        "timeout_rate": 0.0,
+        "tps": 12404.539204234548,
+        "structural_infeasible": 0.0
+      },
+      {
+        "m": 9,
+        "action_idx": 197,
+        "eligible_size": 10.955833333333333,
+        "committee_size": 8.426666666666668,
+        "unsafe_rate": 0.0,
+        "latency": 24.132096087600623,
+        "queue_size": 2.3033333333333337,
+        "timeout_rate": 0.0,
+        "tps": 11559.080257947062,
+        "structural_infeasible": 0.0
+      }
+    ],
+    "theta_scan": [
+      {
+        "theta": 0.45,
+        "action_idx": 116,
+        "eligible_size": 11.514166666666668,
+        "committee_size": 6.983333333333334,
+        "unsafe_rate": 0.0,
+        "latency": 22.51331175837463,
+        "queue_size": 0.028333333333333332,
+        "timeout_rate": 0.0,
+        "tps": 12300.01951202682,
+        "structural_infeasible": 0.0
+      },
+      {
+        "theta": 0.5,
+        "action_idx": 117,
+        "eligible_size": 10.838333333333333,
+        "committee_size": 6.956666666666668,
+        "unsafe_rate": 0.0,
+        "latency": 22.231430367061577,
+        "queue_size": 0.17916666666666667,
+        "timeout_rate": 0.0,
+        "tps": 12404.539204234548,
+        "structural_infeasible": 0.0
+      },
+      {
+        "theta": 0.55,
+        "action_idx": 118,
+        "eligible_size": 9.899166666666666,
+        "committee_size": 6.866666666666667,
+        "unsafe_rate": 0.0,
+        "latency": 21.635670703623813,
+        "queue_size": 0.7733333333333334,
+        "timeout_rate": 0.0,
+        "tps": 12742.630659950039,
+        "structural_infeasible": 0.0
+      },
+      {
+        "theta": 0.6,
+        "action_idx": 119,
+        "eligible_size": 9.323333333333334,
+        "committee_size": 6.466666666666667,
+        "unsafe_rate": 0.0,
+        "latency": 20.889878122695073,
+        "queue_size": 8.225833333333334,
+        "timeout_rate": 0.0,
+        "tps": 13164.98264240484,
+        "structural_infeasible": 0.0
+      }
+    ]
+  },
+  "low_level": {
+    "b_scan": [
+      {
+        "b": 256,
+        "action_idx": 85,
+        "eligible_size": 10.618333333333334,
+        "committee_size": 6.931666666666667,
+        "unsafe_rate": 0.0,
+        "latency": 21.588251830800335,
+        "queue_size": 263.68666666666667,
+        "timeout_rate": 0.0,
+        "tps": 12608.41015771691,
+        "structural_infeasible": 0.0
+      },
+      {
+        "b": 320,
+        "action_idx": 101,
+        "eligible_size": 10.838333333333333,
+        "committee_size": 6.956666666666668,
+        "unsafe_rate": 0.0,
+        "latency": 21.937351940716297,
+        "queue_size": 0.17916666666666667,
+        "timeout_rate": 0.0,
+        "tps": 12592.776870407899,
+        "structural_infeasible": 0.0
+      },
+      {
+        "b": 384,
+        "action_idx": 117,
+        "eligible_size": 10.838333333333333,
+        "committee_size": 6.956666666666668,
+        "unsafe_rate": 0.0,
+        "latency": 22.231430367061577,
+        "queue_size": 0.17916666666666667,
+        "timeout_rate": 0.0,
+        "tps": 12404.539204234548,
+        "structural_infeasible": 0.0
+      },
+      {
+        "b": 448,
+        "action_idx": 133,
+        "eligible_size": 10.838333333333333,
+        "committee_size": 6.956666666666668,
+        "unsafe_rate": 0.0,
+        "latency": 22.52550879340686,
+        "queue_size": 0.17916666666666667,
+        "timeout_rate": 0.0,
+        "tps": 12224.90231223152,
+        "structural_infeasible": 0.0
+      },
+      {
+        "b": 512,
+        "action_idx": 149,
+        "eligible_size": 10.8375,
+        "committee_size": 6.956666666666668,
+        "unsafe_rate": 0.0,
+        "latency": 22.826253886418804,
+        "queue_size": 0.17916666666666667,
+        "timeout_rate": 0.0,
+        "tps": 12054.400461923704,
+        "structural_infeasible": 0.0
+      }
+    ],
+    "tau_scan": [
+      {
+        "tau": 40,
+        "action_idx": 113,
+        "eligible_size": 10.838333333333333,
+        "committee_size": 6.956666666666668,
+        "unsafe_rate": 0.0,
+        "latency": 22.231430367061577,
+        "queue_size": 0.17916666666666667,
+        "timeout_rate": 0.0,
+        "tps": 12404.539204234548,
+        "structural_infeasible": 0.0
+      },
+      {
+        "tau": 60,
+        "action_idx": 117,
+        "eligible_size": 10.838333333333333,
+        "committee_size": 6.956666666666668,
+        "unsafe_rate": 0.0,
+        "latency": 22.231430367061577,
+        "queue_size": 0.17916666666666667,
+        "timeout_rate": 0.0,
+        "tps": 12404.539204234548,
+        "structural_infeasible": 0.0
+      },
+      {
+        "tau": 80,
+        "action_idx": 121,
+        "eligible_size": 10.838333333333333,
+        "committee_size": 6.956666666666668,
+        "unsafe_rate": 0.0,
+        "latency": 22.231430367061577,
+        "queue_size": 0.17916666666666667,
+        "timeout_rate": 0.0,
+        "tps": 12404.539204234548,
+        "structural_infeasible": 0.0
+      },
+      {
+        "tau": 100,
+        "action_idx": 125,
+        "eligible_size": 10.983333333333334,
+        "committee_size": 6.573333333333333,
+        "unsafe_rate": 0.0,
+        "latency": 21.703221344267533,
+        "queue_size": 23.93,
+        "timeout_rate": 0.0,
+        "tps": 12662.52980017073,
+        "structural_infeasible": 0.0
+      }
+    ]
+  }
+}

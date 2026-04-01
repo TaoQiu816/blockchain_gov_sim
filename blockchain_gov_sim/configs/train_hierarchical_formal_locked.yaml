@@ -1,0 +1,53 @@
+output_root: outputs/chapter4_final_theory_locked
+run_name: chapter4_final_theory_locked_seed42
+
+eval:
+  episodes: 12
+  deterministic: true
+
+hierarchical:
+  update_interval: 10
+  stage1:
+    train_mode: oracle_supervised
+    pretrained_model_path: ""
+    total_timesteps: 24000
+    dataset:
+      scenario_names: [load_shock, high_rtt_burst, churn_burst, malicious_burst]
+      high_template_coverage: all
+      max_states_per_phase: 12
+      max_episodes_per_scenario: 8
+    supervised:
+      batch_size: 128
+  stage15:
+    frontier_csv: outputs/chapter4_window_frontier/window_fixed_frontier.csv
+    source_run_root: outputs/chapter4_final_theory_locked/hierarchical
+    source_run_name_pattern: chapter4_final_theory_locked_seed{seed}
+    source_low_model_relpath: stage3_high_refine/low_model.zip
+    source_seeds: [42, 43, 44]
+    total_timesteps: 24000
+    supervised:
+      batch_size: 128
+      learning_rate: 2.5e-4
+  stage2:
+    total_base_timesteps: 24000
+  stage3:
+    rounds: 3
+    low_base_timesteps_per_round: 2000
+    high_base_timesteps_per_round: 4000
+    low_actor_train_mode: frozen
+  low_agent:
+    learning_rate: 2.5e-4
+    n_steps: 512
+    batch_size: 128
+    n_epochs: 8
+    ent_coef: 0.01
+  high_agent:
+    learning_rate: 2.5e-4
+    n_steps: 128
+    batch_size: 64
+    n_epochs: 6
+    ent_coef: 0.01
+    cost_limit: 0.10
+  compare:
+    episodes: 12
+    flat_model_path: outputs/finalized_flat_compare/train/hard_seed42_flat_finalized/model.zip

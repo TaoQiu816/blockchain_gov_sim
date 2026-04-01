@@ -1,5 +1,9 @@
 # 第四章参数体系标定
 
+> 注：当前链侧分层动态治理的正式理论口径，以
+> `docs/CHAIN_SIDE_LAYERED_DYNAMIC_GOVERNANCE_THEORY.md`
+> 为准。本文档保留历史标定记录，不再作为“是否可以进入训练”的最终依据。
+
 仓库路径：`/Users/qiutao/研/毕设/毕设/blockchainSim/blockchain_gov_sim`
 
 ## 1. 标定目标

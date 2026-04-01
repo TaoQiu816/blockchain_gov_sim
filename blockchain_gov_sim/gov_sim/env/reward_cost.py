@@ -1,10 +1,4 @@
-"""奖励与成本函数。
-
-主方案明确要求：
-- reward 与 cost 分开建模；
-- cost 不能只被吸收到 reward 里；
-- PPO-Lagrangian 使用 reward advantage 与 cost advantage 分别训练。
-"""
+"""奖励与成本函数。"""
 
 from __future__ import annotations
 
@@ -17,41 +11,38 @@ from gov_sim.env.action_codec import GovernanceAction
 
 def compute_reward(
     config: dict[str, Any],
-    service_capacity: float,
+    served: float,
     latency: float,
     queue_next: float,
+    batch_size: int,
     action: GovernanceAction,
     prev_action: GovernanceAction,
 ) -> tuple[float, dict[str, float]]:
-    """计算主任务 reward。
+    """计算冻结版主任务 reward。"""
 
-    对应论文：
-    `r_e = λ1 log(1+S_e) - λ2 L_bar_e - λ3 Q_{e+1} - λ4 ||a_e-a_{e-1}||_1`
-    """
-
-    rw = config["reward_weights"]
-    smooth = abs(action.m - prev_action.m) + abs(action.b - prev_action.b) / 128.0 + abs(action.tau - prev_action.tau) / 20.0 + abs(
-        action.theta - prev_action.theta
-    ) / 0.1
+    smooth = (
+        abs(float(action.rho_m) - float(prev_action.rho_m))
+        + abs(float(action.theta) - float(prev_action.theta))
+        + abs(int(action.b) - int(prev_action.b))
+        + abs(int(action.tau) - int(prev_action.tau))
+    )
+    block_slack = max(float(batch_size) - float(served), 0.0) / max(float(batch_size), 1.0)
     terms = {
-        "throughput": float(rw["throughput"]) * float(np.log1p(service_capacity)),
-        "latency": -float(rw["latency"]) * float(latency),
-        "queue": -float(rw["queue"]) * float(queue_next),
-        "smooth": -float(rw["smooth"]) * float(smooth),
+        "throughput": 1.0 * float(np.log1p(served)),
+        "latency": -0.01 * float(latency),
+        "queue": -0.001 * float(queue_next),
+        "smooth": -0.001 * float(smooth),
+        "block_slack": -0.01 * float(block_slack),
     }
     return float(sum(terms.values())), terms
 
 
-def compute_cost(config: dict[str, Any], unsafe: int, honest_ratio: float) -> tuple[float, dict[str, float]]:
-    """计算安全成本。
+def compute_cost(config: dict[str, Any], unsafe: int, timeout_failure: int = 0, margin_cost: float = 0.0) -> tuple[float, dict[str, float]]:
+    """计算冻结版安全成本。"""
 
-    对应论文：
-    `c_e = U_e + ν (1 - h_e)`
-    """
-
-    cw = config["cost_weights"]
     terms = {
         "unsafe": float(unsafe),
-        "honest_deficit": float(cw["honest_penalty"]) * float(1.0 - honest_ratio),
+        "timeout_failure": 0.12 * float(timeout_failure),
+        "margin_cost": 0.15 * float(margin_cost),
     }
     return float(sum(terms.values())), terms

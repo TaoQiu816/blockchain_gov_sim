@@ -1,0 +1,11 @@
+stage,checkpoint,path,error,seed
+stage1_low_pretrain,final,outputs/formal_multiseed/hierarchical/formal_final_seed42/stage1_low_pretrain/model.zip,"A load persistent id instruction was encountered, but no persistent_load function was specified.",42
+stage2_high_train,final,outputs/formal_multiseed/hierarchical/formal_final_seed42/stage2_high_train/model.zip,No data.pkl found,42
+stage1_low_pretrain,final,outputs/formal_multiseed/hierarchical/formal_final_seed43/stage1_low_pretrain/model.zip,"A load persistent id instruction was encountered, but no persistent_load function was specified.",43
+stage2_high_train,final,outputs/formal_multiseed/hierarchical/formal_final_seed43/stage2_high_train/model.zip,No data.pkl found,43
+stage1_low_pretrain,final,outputs/formal_multiseed/hierarchical/formal_final_seed44/stage1_low_pretrain/model.zip,"A load persistent id instruction was encountered, but no persistent_load function was specified.",44
+stage2_high_train,final,outputs/formal_multiseed/hierarchical/formal_final_seed44/stage2_high_train/model.zip,No data.pkl found,44
+stage1_low_pretrain,final,outputs/formal_multiseed/hierarchical/formal_final_seed45/stage1_low_pretrain/model.zip,"A load persistent id instruction was encountered, but no persistent_load function was specified.",45
+stage2_high_train,final,outputs/formal_multiseed/hierarchical/formal_final_seed45/stage2_high_train/model.zip,No data.pkl found,45
+stage1_low_pretrain,final,outputs/formal_multiseed/hierarchical/formal_final_seed46/stage1_low_pretrain/model.zip,"A load persistent id instruction was encountered, but no persistent_load function was specified.",46
+stage2_high_train,final,outputs/formal_multiseed/hierarchical/formal_final_seed46/stage2_high_train/model.zip,No data.pkl found,46

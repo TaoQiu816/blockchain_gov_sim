@@ -1,0 +1,4 @@
+template,count,ratio,scenario
+7|0.55,1194,0.8291666666666667,high_rtt_burst
+7|0.45,223,0.15486111111111112,high_rtt_burst
+5|0.50,23,0.01597222222222222,high_rtt_burst
