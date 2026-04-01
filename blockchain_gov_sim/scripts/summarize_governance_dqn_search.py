@@ -120,7 +120,13 @@ def _formal_commands(best: dict[str, Any]) -> str:
         "train_freq": int(best["train_freq"]),
     }
 
-    def _train_cmd(seed: int, output_dir: str, mixed: bool, extra_override: str | None = None) -> str:
+    def _train_cmd(
+        seed: int,
+        output_dir: str,
+        mixed: bool,
+        extra_override: str | None = None,
+        checkpoint_mode: str = "overwrite",
+    ) -> str:
         parts = [
             sys.executable,
             "scripts/train_governance_dqn.py",
@@ -145,6 +151,8 @@ def _formal_commands(best: dict[str, Any]) -> str:
                 str(FULL_BUDGET["eval_episodes"]),
                 "--seed",
                 str(seed),
+                "--checkpoint-mode",
+                checkpoint_mode,
                 "--lr",
                 str(hp["lr"]),
                 "--target-update-period",
@@ -168,7 +176,8 @@ def _formal_commands(best: dict[str, Any]) -> str:
     lines.append("")
     lines.append("# Part B: mixed 3-seed")
     for seed in FORMAL_SEEDS:
-        lines.append(_train_cmd(seed, f"outputs/governance_dqn_formal/part_b_mixed/seed{seed}/train", mixed=True))
+        mode = "periodic" if seed == 42 else "overwrite"
+        lines.append(_train_cmd(seed, f"outputs/governance_dqn_formal/part_b_mixed/seed{seed}/train", mixed=True, checkpoint_mode=mode))
     lines.append("")
     lines.append("# Part C: checkpoint-based 分场景趋势（建议先用 mixed seed42）")
     lines.append(

@@ -130,6 +130,7 @@ def main() -> None:
     parser.add_argument("--eval-episodes", type=int, default=2)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--mixed-scenario", action="store_true")
+    parser.add_argument("--checkpoint-mode", choices=["overwrite", "periodic", "off"], default="overwrite")
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--target-update-period", type=int, default=None)
     parser.add_argument("--warmup-steps", type=int, default=None)
@@ -282,7 +283,10 @@ def main() -> None:
                 row["global_step"] = int(total_steps)
                 row["scenario_name"] = scenario_name
                 eval_rows_by_scenario.append(row)
-            agent.save(checkpoint_dir / f"episode_{episode + 1:04d}.pt")
+            if args.checkpoint_mode == "periodic":
+                agent.save(checkpoint_dir / f"episode_{episode + 1:04d}.pt")
+            elif args.checkpoint_mode == "overwrite":
+                agent.save(checkpoint_dir / "progress_checkpoint.pt")
             if best_summary_by_scenario is None or _worst_case_key(by_scenario) < _worst_case_key(best_summary_by_scenario):
                 best_summary = summary
                 best_summary_by_scenario = by_scenario
@@ -352,6 +356,7 @@ def main() -> None:
         "episodes_completed": int(len(episode_df)),
         "total_env_steps": int(total_steps),
         "mixed_scenario": bool(args.mixed_scenario),
+        "checkpoint_mode": str(args.checkpoint_mode),
         "training_hyperparameters": train_hyperparameters,
         "mixed_training_protocol": {
             "type": "three_stage_curriculum" if bool(args.mixed_scenario) else "normal_only",
