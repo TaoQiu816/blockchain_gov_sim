@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from gov_sim.agent.constrained_dueling_dqn import ConstrainedDoubleDuelingDQN
+from gov_sim.agent.constrained_dueling_dqn import AGENT_VARIANTS, ConstrainedDoubleDuelingDQN
 from gov_sim.env.gov_env import BlockchainGovEnv
 from gov_sim.experiments.benchmark_runner import (
     MIXED_TRAINING_CURRICULUM,
@@ -131,6 +131,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--mixed-scenario", action="store_true")
     parser.add_argument("--checkpoint-mode", choices=["overwrite", "periodic", "off"], default="overwrite")
+    parser.add_argument("--agent-variant", choices=AGENT_VARIANTS, default="proposed")
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--target-update-period", type=int, default=None)
     parser.add_argument("--warmup-steps", type=int, default=None)
@@ -149,6 +150,7 @@ def main() -> None:
         action_dim=int(env.action_space.n),
         device="cpu",
         cost_limit=0.10,
+        agent_variant=str(args.agent_variant),
         lr=args.lr,
         target_update_period=args.target_update_period,
         warmup_steps=args.warmup_steps,
@@ -157,6 +159,7 @@ def main() -> None:
     )
     checkpoint_dir = ensure_dir(output_dir / "checkpoints")
     train_hyperparameters = {
+        "agent_variant": str(agent.agent_variant),
         "lr": float(agent.lr),
         "target_update_period": int(agent.target_update_period),
         "warmup_steps": int(agent.warmup_steps),
@@ -356,6 +359,7 @@ def main() -> None:
         "episodes_completed": int(len(episode_df)),
         "total_env_steps": int(total_steps),
         "mixed_scenario": bool(args.mixed_scenario),
+        "agent_variant": str(agent.agent_variant),
         "checkpoint_mode": str(args.checkpoint_mode),
         "training_hyperparameters": train_hyperparameters,
         "mixed_training_protocol": {
