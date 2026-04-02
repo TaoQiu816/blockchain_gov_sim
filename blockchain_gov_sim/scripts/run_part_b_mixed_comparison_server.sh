@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 SYNC_SCRIPT="${SCRIPT_DIR}/git_sync_formal_artifacts.sh"
+AUTO_SHUTDOWN="${AUTO_SHUTDOWN:-1}"
 
 cd "${REPO_ROOT}"
 
@@ -100,11 +101,16 @@ run_comparison() {
 
 echo "[run] repo root: ${REPO_ROOT}"
 echo "[run] branch: $(git branch --show-current)"
+echo "[run] auto_shutdown: ${AUTO_SHUTDOWN}"
 
 run_train proposed proposed periodic
 run_train vanilla_dqn vanilla_dqn overwrite
 run_train no_constraint_dueling_double_dqn no_constraint_dueling_double_dqn overwrite
 run_comparison
 
-echo "[run] all part B mixed comparison jobs completed; shutdown in 2 minutes."
-shutdown -h +2 "governance_dqn part B mixed comparison finished" || (sleep 120 && poweroff) &
+if [ "${AUTO_SHUTDOWN}" = "1" ]; then
+  echo "[run] all part B mixed comparison jobs completed; shutdown in 2 minutes."
+  shutdown -h +2 "governance_dqn part B mixed comparison finished" || (sleep 120 && poweroff) &
+else
+  echo "[run] all part B mixed comparison jobs completed; auto shutdown disabled."
+fi
