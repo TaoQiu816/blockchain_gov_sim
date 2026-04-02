@@ -41,6 +41,13 @@ def _metric(summary: dict[str, Any], primary: str, fallback: str, default: float
     return float(summary.get(primary, summary.get(fallback, default)))
 
 
+def _resolve_run_path(path_str: str, search_root: Path, run_id: str, leaf: str) -> Path:
+    path = Path(str(path_str))
+    if path.exists():
+        return path
+    return search_root / run_id / leaf
+
+
 def _adv_tuple(dqn: dict[str, Any], baseline: dict[str, Any]) -> tuple[float, float, float, float, float]:
     return (
         _metric(baseline, "unsafe_rate", "unsafe_rate_all_steps", 1.0) - _metric(dqn, "unsafe_rate", "unsafe_rate_all_steps", 1.0),
@@ -82,16 +89,17 @@ def _load_eval_metrics(eval_summary_path: Path) -> tuple[dict[str, Any], dict[st
     return metrics, per_scenario
 
 
-def _load_baseline_advantage(benchmark_csv: Path) -> dict[str, float]:
+def _load_baseline_advantage(
+    dqn_per_scenario: dict[str, dict[str, Any]],
+    benchmark_csv: Path,
+) -> dict[str, float]:
     frame = pd.read_csv(benchmark_csv)
-    dqn_frame = frame[frame["method"] == "DQN"]
     base_frame = frame[frame["method"] == "Global-Static-Fixed"]
-    dqn_by_scenario = {str(row["scenario"]): row.to_dict() for _, row in dqn_frame.iterrows()}
     base_by_scenario = {str(row["scenario"]): row.to_dict() for _, row in base_frame.iterrows()}
     tuples = [
-        _adv_tuple(dqn_by_scenario[scenario], base_by_scenario[scenario])
+        _adv_tuple(dqn_per_scenario[scenario], base_by_scenario[scenario])
         for scenario in SCENARIO_ORDER
-        if scenario in dqn_by_scenario and scenario in base_by_scenario
+        if scenario in dqn_per_scenario and scenario in base_by_scenario
     ]
     if not tuples:
         return {
@@ -221,16 +229,30 @@ def main() -> None:
     output_dir = ensure_dir(search_root / "analysis")
     manifest_payload = _load_json(search_root / "search_manifest.json")
     manifest = manifest_payload["runs"]
-    shared_baseline_csv = Path(str(manifest_payload.get("shared_baseline_output_dir", search_root / "shared_baseline"))) / "benchmark_by_scenario.csv"
+    shared_baseline_root = Path(str(manifest_payload.get("shared_baseline_output_dir", search_root / "shared_baseline")))
+    if not shared_baseline_root.exists():
+        shared_baseline_root = search_root / "shared_baseline"
+    shared_baseline_csv = shared_baseline_root / "benchmark_by_scenario.csv"
 
     rows: list[dict[str, Any]] = []
     for entry in manifest:
         row = dict(entry)
-        eval_summary_path = Path(str(entry["eval_output_dir"])) / "eval_summary_by_scenario.json"
-        baseline_csv_path = Path(str(entry["eval_output_dir"])) / "baseline_compare" / "benchmark_by_scenario.csv"
+        eval_summary_path = _resolve_run_path(
+            path_str=str(entry["eval_output_dir"]),
+            search_root=search_root,
+            run_id=str(entry["run_id"]),
+            leaf="eval",
+        ) / "eval_summary_by_scenario.json"
+        baseline_csv_path = _resolve_run_path(
+            path_str=str(entry["eval_output_dir"]),
+            search_root=search_root,
+            run_id=str(entry["run_id"]),
+            leaf="eval",
+        ) / "baseline_compare" / "benchmark_by_scenario.csv"
         resolved_baseline_csv = baseline_csv_path if baseline_csv_path.exists() else shared_baseline_csv
+        dqn_per_scenario: dict[str, dict[str, Any]] = {}
         if eval_summary_path.exists():
-            metrics, _ = _load_eval_metrics(eval_summary_path)
+            metrics, dqn_per_scenario = _load_eval_metrics(eval_summary_path)
             row.update(metrics)
             row["status"] = "complete" if resolved_baseline_csv.exists() else "missing_baseline_compare"
         else:
@@ -244,8 +266,8 @@ def main() -> None:
                 }
             )
             row["status"] = "missing_eval"
-        if resolved_baseline_csv.exists():
-            row.update(_load_baseline_advantage(resolved_baseline_csv))
+        if resolved_baseline_csv.exists() and dqn_per_scenario:
+            row.update(_load_baseline_advantage(dqn_per_scenario, resolved_baseline_csv))
         else:
             row.update(
                 {

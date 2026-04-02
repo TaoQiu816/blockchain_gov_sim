@@ -1,6 +1,6 @@
 # Governance DQN Search Summary
 
-- 搜索根目录: `/root/blockchainSim/blockchain_gov_sim/outputs/governance_dqn_search`
+- 搜索根目录: `/Users/qiutao/研/毕设/毕设/blockchainSim/blockchain_gov_sim/outputs/governance_dqn_search`
 - 已发现运行数: `108`
 - 已完成评估数: `108`
 
@@ -24,5 +24,5 @@ cfg043,0.0001,500,10000,50000,2,complete,0.3458333333333333,0.23,0.3945833333333
 
 ```text
 run_id,lr,target_update_period,warmup_steps,epsilon_decay_steps,train_freq,max_unsafe,max_structural_infeasible,max_timeout,max_mean_latency,min_tps,worst_adv_unsafe,worst_adv_structural_infeasible,worst_adv_timeout,worst_adv_mean_latency,worst_adv_tps
-cfg011,5e-05,500,10000,120000,2,0.3458333333333333,0.23,0.35,115.37342527104649,1565.5216704531267,-inf,-inf,-inf,-inf,-inf
+cfg011,5e-05,500,10000,120000,2,0.3458333333333333,0.23,0.35,115.37342527104649,1565.5216704531267,-6.591949208711867e-17,-6.591949208711867e-17,-0.006666666666666667,7.044131461339049,151.3535908224901
 ```

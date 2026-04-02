@@ -20,9 +20,9 @@
   "max_mean_latency": 115.37342527104649,
   "min_tps": 1565.5216704531267,
   "status": "complete",
-  "worst_adv_unsafe": -Infinity,
-  "worst_adv_structural_infeasible": -Infinity,
-  "worst_adv_timeout": -Infinity,
-  "worst_adv_mean_latency": -Infinity,
-  "worst_adv_tps": -Infinity
+  "worst_adv_unsafe": -6.591949208711867e-17,
+  "worst_adv_structural_infeasible": -6.591949208711867e-17,
+  "worst_adv_timeout": -0.006666666666666667,
+  "worst_adv_mean_latency": 7.044131461339049,
+  "worst_adv_tps": 151.3535908224901
 }
